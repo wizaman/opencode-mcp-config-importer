@@ -40,6 +40,29 @@ export function parseMcpJson(text: string): ParseResult {
       result.diagnostics.push(`mcpServers.${name} must be an object`);
       continue;
     }
+    if (value.type === "http") {
+      if (typeof value.url !== "string" || !isHttpUrl(value.url)) {
+        result.diagnostics.push(
+          `mcpServers.${name}.url must be an absolute HTTP(S) URL`,
+        );
+        continue;
+      }
+      if (value.headers !== undefined && !stringRecord(value.headers)) {
+        result.diagnostics.push(
+          `mcpServers.${name}.headers must contain only string values`,
+        );
+        continue;
+      }
+      result.servers.push({
+        name,
+        config: {
+          type: "remote",
+          url: value.url,
+          ...(value.headers === undefined ? {} : { headers: value.headers }),
+        },
+      });
+      continue;
+    }
     if (value.type !== undefined && value.type !== "stdio") {
       result.diagnostics.push(`mcpServers.${name}: unsupported type`);
       continue;
@@ -94,4 +117,12 @@ export function parseMcpJson(text: string): ParseResult {
   }
 
   return result;
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
 }

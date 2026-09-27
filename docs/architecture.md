@@ -7,7 +7,7 @@ updated: 2026-09-28
 
 ## 位置づけ
 
-この文書は構成と実装範囲を記録する。現在は stdio サーバーの読み込み・登録と OpenCode 経由の動作確認まで完了し、remote は今後の作業である。機能要件は [prd.md](./prd.md)、開発・配布の方針は [tech-stack.md](./tech-stack.md) を参照する。
+この文書は構成と実装範囲を記録する。現在は stdio と Streamable HTTP のサーバー定義の取り込みと OpenCode 経由の動作確認まで完了している。機能要件は [prd.md](./prd.md)、開発・配布の方針は [tech-stack.md](./tech-stack.md) を参照する。
 
 このプラグインは、プロジェクトルート直下の **単一の `.mcp.json`** を OpenCode V2 の MCP 設定に取り込む。`*.mcp.json` の検索、親ディレクトリの走査、グローバルな `.mcp.json` の読み込みは行わない。入力ファイルを正本とし、OpenCode の設定ファイルや生成ファイルには書き込まない。
 
@@ -30,7 +30,7 @@ flowchart LR
 | 境界 | 責務 |
 | --- | --- |
 | `src/index.ts` | Plugin ID `opencode-mcp-json-adapter` を公開し、読み込み結果を MCP transform に登録する。 |
-| `src/mcp_json.ts` | JSON解析、`mcpServers` 以下のサーバー単位の検証、stdio 定義の変換を行う。OpenCode を起動せず単体テストできる。 |
+| `src/mcp_json.ts` | JSON解析、`mcpServers` 以下のサーバー単位の検証、stdio / HTTP 定義の変換を行う。OpenCode を起動せず単体テストできる。 |
 | OpenCode | MCP registry の構築、接続のライフサイクル、実際のサーバー起動・通信を担う。 |
 
 ファイルの読み込みは `src/index.ts`、内容の解析・変換は `src/mcp_json.ts` が担当する。独立した内部表現や追加のファイル分割は設けない。
@@ -43,7 +43,7 @@ flowchart LR
 
 ## 変換と優先順位
 
-入力は `.mcp.json` の `mcpServers` にある名前付き定義とする。現在は stdio の `command` / `args` / `env` / `cwd` に対応し、OpenCode V2 の `type: "local"`、コマンド配列、`environment` などに変換する。remote の URL / headers は今後の対象であり、現状は登録しない。未対応のハーネス固有フィールドから OAuth などを推測しない。
+入力は `.mcp.json` の `mcpServers` にある名前付き定義とする。stdio の `command` / `args` / `env` / `cwd` を OpenCode V2 の `type: "local"`、コマンド配列、`environment` などに変換する。`type: "http"` の remote は絶対 HTTP(S) URL と文字列の headers を受け取り、OpenCode の `type: "remote"` に変換する。SSE などの別 transport は扱わない。未対応のハーネス固有フィールドから OAuth などを推測しない。
 
 `ctx.mcp.transform` のコールバックでは、各サーバーについて `editor.get(name)` で既存定義を確認する。既に同名の定義があれば `editor.set` せず、OpenCode ネイティブ設定を優先する。存在しない定義のみ追加する。プラグインが別のサーバーを削除・更新することはない。transform は再適用され得るため、外部の状態を書き換えず、同じ入力に対して同じ登録結果を返す。
 
@@ -58,4 +58,4 @@ flowchart LR
 
 読み込み・変換の単体テストでは、ファイル不在、空の一覧、stdio / remote、複数サーバー、不正な JSON、一部のみ不正、未知のフィールド、名前衝突、Windows / Unix のコマンドとパスを扱う。MCP サーバーの起動を必要としないテストにする。
 
-ルートの `.mcp.json` に設定済みの Everything MCP サーバーを利用し、Copilot CLI からの接続に加え、OpenCode でサーバーのツールが見え、`echo` を呼び出せることを確認した。
+ルートの `.mcp.json` に設定済みの `everything-stdio` と `everything-remote` を利用した。stdio は OpenCode でツールが見え、`echo` を呼び出せることを確認済み。remote は Everything サーバーを `deno x -A -y npm:@modelcontextprotocol/server-everything streamableHttp` で別プロセスとして起動し、OpenCode の別インスタンスで両方のサーバーが connected となり、remote 側の `echo` を呼び出せることを確認した。検証用プロセスは終了済み。
