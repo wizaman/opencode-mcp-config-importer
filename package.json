@@ -1,0 +1,14 @@
+{
+  "name": "opencode-mcp-json-adapter",
+  "version": "0.0.0",
+  "description": "Use project-root .mcp.json servers in OpenCode V2",
+  "license": "MIT",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@opencode/plugin": "^2.0.16"
+  }
+}
