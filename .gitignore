@@ -9,3 +9,6 @@
 # https://docs.deno.com/runtime/reference/cli/coverage/
 coverage/
 *.lcov
+
+# Dependencies installed by deno install
+node_modules/

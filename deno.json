@@ -1,0 +1,9 @@
+{
+  "preferPackageJson": true,
+  "tasks": {
+    "check": "deno check src/index.ts tests/index_test.ts",
+    "test": "deno test",
+    "lint": "deno lint",
+    "fmt": "deno fmt --check src tests package.json deno.json .mcp.json"
+  }
+}
