@@ -1,8 +1,12 @@
 {
   "mcpServers": {
-    "everything": {
+    "everything-stdio": {
       "command": "deno",
       "args": ["x", "-A", "-y", "npm:@modelcontextprotocol/server-everything"]
+    },
+    "everything-remote": {
+      "type": "http",
+      "url": "http://localhost:3001/mcp"
     }
   }
 }

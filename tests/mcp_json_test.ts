@@ -66,12 +66,56 @@ Deno.test("rejects malformed JSON without revealing contents", () => {
   assert.deepEqual(parsed.diagnostics, ["invalid JSON"]);
 });
 
+Deno.test("converts a Streamable HTTP server and headers", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      remote: {
+        type: "http",
+        url: "http://localhost:3001/mcp",
+        headers: { Authorization: "Bearer secret" },
+      },
+    },
+  }));
+  assert.deepEqual(parsed, {
+    servers: [{
+      name: "remote",
+      config: {
+        type: "remote",
+        url: "http://localhost:3001/mcp",
+        headers: { Authorization: "Bearer secret" },
+      },
+    }],
+    diagnostics: [],
+  });
+});
+
+Deno.test("skips invalid remote definitions without logging header values", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      good: { type: "http", url: "https://example.com/mcp" },
+      relative: { type: "http", url: "/mcp" },
+      wrongScheme: { type: "http", url: "file:///mcp" },
+      badHeaders: {
+        type: "http",
+        url: "https://example.com/mcp",
+        headers: { Authorization: 123, Secret: "secret" },
+      },
+    },
+  }));
+  assert.deepEqual(parsed.servers, [{
+    name: "good",
+    config: { type: "remote", url: "https://example.com/mcp" },
+  }]);
+  assert.equal(parsed.diagnostics.length, 3);
+  assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
+});
+
 Deno.test("skips invalid or unsupported servers but keeps valid ones", () => {
   const parsed = parseMcpJson(JSON.stringify({
     mcpServers: {
       valid: { command: "server", env: { TOKEN: "secret" } },
       invalid: { command: "server", env: { TOKEN: 123 } },
-      remote: { type: "http", url: "https://example.com/mcp" },
+      unsupported: { type: "sse", url: "https://example.com/sse" },
       missing: { args: ["--help"] },
     },
   }));

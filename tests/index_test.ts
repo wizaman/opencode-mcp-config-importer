@@ -27,6 +27,7 @@ Deno.test("uses only the project root and preserves native MCP definitions", asy
         mcpServers: {
           existing: { command: "imported" },
           added: { command: "deno", args: ["x", "-A"] },
+          remote: { type: "http", url: "http://localhost:3001/mcp" },
         },
       }),
     );
@@ -64,6 +65,10 @@ Deno.test("uses only the project root and preserves native MCP definitions", asy
     assert.deepEqual(definitions.get("added"), {
       type: "local",
       command: ["deno", "x", "-A"],
+    });
+    assert.deepEqual(definitions.get("remote"), {
+      type: "remote",
+      url: "http://localhost:3001/mcp",
     });
     assert.equal(definitions.has("nested"), false);
 
