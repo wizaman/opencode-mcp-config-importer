@@ -7,6 +7,10 @@
     "everything-remote": {
       "type": "http",
       "url": "http://localhost:3001/mcp"
+    },
+    "example-oauth": {
+      "type": "http",
+      "url": "http://localhost:3232/mcp"
     }
   }
 }

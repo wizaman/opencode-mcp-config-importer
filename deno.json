@@ -1,9 +1,13 @@
 {
   "preferPackageJson": true,
+  "test": {
+    "include": ["tests/"]
+  },
   "tasks": {
-    "check": "deno check src/index.ts src/mcp_json.ts tests/index_test.ts tests/mcp_json_test.ts scripts/smoke-remote.ts",
+    "check": "deno check src/index.ts src/mcp_json.ts tests/index_test.ts tests/mcp_json_test.ts scripts/smoke-remote.ts scripts/serve-oauth.ts",
     "test": "deno test --allow-read --allow-write",
     "smoke:remote": "deno run -A scripts/smoke-remote.ts",
+    "oauth:serve": "deno run -A scripts/serve-oauth.ts",
     "lint": "deno lint",
     "fmt": "deno fmt --check src tests scripts package.json deno.json .mcp.json opencode.jsonc"
   }

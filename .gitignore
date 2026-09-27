@@ -12,3 +12,6 @@ coverage/
 
 # Dependencies installed by deno install
 node_modules/
+
+# Local external integration fixtures
+temp/
