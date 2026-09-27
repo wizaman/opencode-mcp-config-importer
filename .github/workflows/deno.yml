@@ -30,6 +30,9 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Install dependencies
+        run: deno install --frozen-lockfile
+
       # Uncomment this step to verify the use of 'deno fmt' on each commit.
       # - name: Verify formatting
       #   run: deno fmt --check
