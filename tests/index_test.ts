@@ -67,6 +67,68 @@ Deno.test("committed fixtures honor opt-in, source order, and native precedence"
   assert.equal(onlyCodex.has("json-only"), false);
 });
 
+Deno.test("env HTTP headers require an explicit boolean opt-in", async () => {
+  const root = fileURLToPath(
+    new URL("./fixtures/env-headers/", import.meta.url),
+  );
+  const variable = "ADAPTER_ENV_HEADER_PROBE";
+  const original = Deno.env.get(variable);
+  const originalWarn = console.warn;
+  const warnings: string[] = [];
+  async function definitions(options: Record<string, unknown>) {
+    const servers = new Map<string, unknown>();
+    const context = {
+      options,
+      location: { project: { directory: root } },
+      mcp: {
+        transform: (callback: (editor: Editor) => void) => {
+          callback({
+            get: (name: string) => servers.get(name),
+            set: (name: string, config: unknown) => servers.set(name, config),
+          } as unknown as Editor);
+          return Promise.resolve();
+        },
+      },
+    } as unknown as Context;
+    await plugin.setup(context);
+    return servers;
+  }
+  try {
+    console.warn = (...args: unknown[]) =>
+      warnings.push(args.map(String).join(" "));
+    Deno.env.set(variable, "dummy-value");
+    const disabled = await definitions({ sources: ["codex"] });
+    assert.equal(disabled.has("env-probe"), false);
+    const fallback = await definitions({ sources: ["codex", "mcp-json"] });
+    assert.deepEqual(fallback.get("env-probe"), {
+      type: "local",
+      command: ["fallback-server"],
+    });
+    const invalid = await definitions({
+      sources: ["codex", "mcp-json"],
+      allowCodexEnvHttpHeaders: "true",
+    });
+    assert.deepEqual(invalid.get("env-probe"), fallback.get("env-probe"));
+    const enabled = await definitions({
+      sources: ["codex", "mcp-json"],
+      allowCodexEnvHttpHeaders: true,
+    });
+    assert.deepEqual(enabled.get("env-probe"), {
+      type: "remote",
+      url: "http://localhost:3001/mcp",
+      headers: { "x-fallback": "dummy-value", "X-Only-Env": "dummy-value" },
+    });
+    assert(
+      warnings.some((message) => message.includes("allowCodexEnvHttpHeaders")),
+    );
+    assert(warnings.every((message) => !message.includes("dummy-value")));
+  } finally {
+    console.warn = originalWarn;
+    if (original === undefined) Deno.env.delete(variable);
+    else Deno.env.set(variable, original);
+  }
+});
+
 type Context = Parameters<typeof plugin.setup>[0];
 type Editor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0];
 

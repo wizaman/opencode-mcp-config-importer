@@ -4,10 +4,11 @@
     "include": ["tests/"]
   },
   "tasks": {
-    "check": "deno check src/index.ts src/mcp_json.ts src/codex_toml.ts tests/index_test.ts tests/mcp_json_test.ts tests/codex_toml_test.ts scripts/smoke-remote.ts scripts/smoke-codex-headers.ts scripts/serve-oauth.ts",
-    "test": "deno test --allow-read --allow-write",
+    "check": "deno check src/index.ts src/mcp_json.ts src/codex_toml.ts tests/index_test.ts tests/mcp_json_test.ts tests/codex_toml_test.ts scripts/smoke-remote.ts scripts/smoke-codex-headers.ts scripts/smoke-codex-env-headers.ts scripts/serve-oauth.ts",
+    "test": "deno test --allow-read --allow-write --allow-env=ADAPTER_ENV_HEADER_PROBE",
     "smoke:remote": "deno run -A scripts/smoke-remote.ts",
     "smoke:codex-headers": "deno run -A scripts/smoke-codex-headers.ts",
+    "smoke:codex-env-headers": "deno run -A scripts/smoke-codex-env-headers.ts",
     "remote:serve": "deno run -A --no-config --node-modules-dir=none npm:@modelcontextprotocol/server-everything/dist/index.js streamableHttp",
     "oauth:serve": "deno run -A scripts/serve-oauth.ts",
     "lint": "deno lint",
