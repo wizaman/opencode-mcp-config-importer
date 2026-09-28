@@ -4,7 +4,7 @@
     "include": ["tests/"]
   },
   "tasks": {
-    "check": "deno check src/index.ts src/mcp_json.ts src/codex_toml.ts tests/index_test.ts tests/mcp_json_test.ts tests/codex_toml_test.ts scripts/smoke-remote.ts scripts/smoke-codex-headers.ts scripts/smoke-codex-env-headers.ts scripts/serve-oauth.ts",
+    "check": "deno check src tests scripts",
     "test": "deno test --allow-read --allow-write --allow-env=ADAPTER_ENV_HEADER_PROBE",
     "smoke:remote": "deno run -A scripts/smoke-remote.ts",
     "smoke:codex-headers": "deno run -A scripts/smoke-codex-headers.ts",
