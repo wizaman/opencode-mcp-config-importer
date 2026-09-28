@@ -29,6 +29,15 @@ export default Plugin.define({
       );
       return;
     }
+    const allowEnvHttpHeaders = ctx.options?.allowCodexEnvHttpHeaders === true;
+    if (
+      ctx.options?.allowCodexEnvHttpHeaders !== undefined &&
+      typeof ctx.options.allowCodexEnvHttpHeaders !== "boolean"
+    ) {
+      console.warn(
+        "[opencode-mcp-json-adapter] options.allowCodexEnvHttpHeaders must be a boolean; env_http_headers stays disabled",
+      );
+    }
     const servers = new Map<
       string,
       ReturnType<typeof parseMcpJson>["servers"][number]["config"]
@@ -48,7 +57,7 @@ export default Plugin.define({
 
       const result = source === "mcp-json"
         ? parseMcpJson(text)
-        : parseCodexToml(text);
+        : parseCodexToml(text, { allowEnvHttpHeaders });
       for (const diagnostic of result.diagnostics) {
         console.warn(`[opencode-mcp-json-adapter] ${path}: ${diagnostic}`);
       }

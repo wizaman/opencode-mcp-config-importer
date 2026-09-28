@@ -16,7 +16,32 @@
 }
 ```
 
-`codex` はプロジェクトルート直下の `.codex/config.toml` のトップレベルの `[mcp_servers]` だけを読みます。対応項目は stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers` です。`enabled = false` のサーバーは取り込みません。`env_http_headers` や Codex 固有の認証設定は未対応で、そのサーバー定義は取り込みません。Codex の trust 判定や他の設定レイヤーは再現しません。OpenCode ネイティブの同名設定を優先し、入力元同士の衝突では `sources` の先に書いた入力元の有効な定義を採用します。通常は衝突を警告しません。
+`codex` はプロジェクトルート直下の `.codex/config.toml` のトップレベルの `[mcp_servers]` だけを読みます。対応項目は stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers` です。`enabled = false` のサーバーは取り込みません。Codex 固有の認証設定を持つサーバーは取り込みません。Codex の trust 判定や他の設定レイヤーは再現しません。OpenCode ネイティブの同名設定を優先し、入力元同士の衝突では `sources` の先に書いた入力元の有効な定義を採用します。通常は衝突を警告しません。
+
+### 環境変数由来の HTTP ヘッダー
+
+Codex の `env_http_headers` を含むサーバーは、既定では**サーバー定義全体を取り込みません**。静的ヘッダーだけを使って接続することはありません。リスクを理解して利用する場合のみ、OpenCode のプラグイン設定に `"allowCodexEnvHttpHeaders": true` を追加します。`true` 以外の値では有効になりません。
+
+```jsonc
+{
+  "plugins": [
+    {
+      "package": "./src",
+      "options": {
+        "sources": ["mcp-json", "codex"],
+        "allowCodexEnvHttpHeaders": true
+      }
+    }
+  ]
+}
+```
+
+例えば `env_http_headers = { "X-API-Key" = "MY_MCP_API_KEY" }` なら、プラグインは**起動時に** OpenCode プロセスの `MY_MCP_API_KEY` を読み、ヘッダーとして OpenCode に渡します。未設定または空白だけの場合はそのヘッダーを追加せず、同名の `http_headers` があれば静的値を残します。値がある場合は、大文字・小文字を区別せず静的ヘッダーを上書きします。変更後の環境変数を使うにはプラグインを再読み込みする必要があります。秘密値そのものをログや診断には出しません。
+
+> [!WARNING]
+> Codex の `shell_environment_policy` やプロジェクトの trust 判定は OpenCode に引き継がれません。opt-in 時にはプラグインと OpenCode の MCP 登録処理が秘密値を扱い、エージェントからの秘密値隔離は保証されません。OpenCode に渡した環境変数は、エージェントが実行できる shell 等からも参照可能な場合があります。**オプションを無効にしても、OpenCode プロセス自体に渡した環境変数を隔離する機能にはなりません。** グローバルなプラグイン設定で有効にすると、適用先の各プロジェクトでこの処理が有効になります。まずは利用するプロジェクトだけで有効化し、隔離が必要な秘密情報には外部の認証 proxy 等を検討してください。
+
+`deno task smoke:codex-env-headers` は、固定 fixture とダミー値を使い OpenCode V2 の別インスタンスで実際の受信ヘッダーを検査する手動テストです。ポート 3001・4097 を空けて実行してください。`deno test` と CI には含まれず、検証後は自身が起動したプロセスだけを停止します。
 
 ヘッダーの実送信は、ポート 3001・4097 が空いている状態で `deno task smoke:codex-headers` を実行すると確認できます。この手動テストは OpenCode V2 の別インスタンスと受信用 MCP サーバーを起動し、`.codex/config.toml` の `X-Test-Source: codex` が届くことを確認して、起動したプロセスだけを停止します。モデルは使用せず、`deno test` や CI には含めません。
 

@@ -73,3 +73,105 @@ Deno.test("rejects malformed TOML without showing input", () => {
     "mcp_servers must be a table",
   ]);
 });
+
+Deno.test("env HTTP headers are disabled by default without reading the environment", () => {
+  const parsed = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+http_headers = { "X-Fallback" = "static-fallback" }
+env_http_headers = { "X-Fallback" = "DUMMY_SECRET" }
+`,
+    {
+      getEnv: () => {
+        throw new Error("must not read environment");
+      },
+    },
+  );
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, [
+    "mcp_servers.remote.env_http_headers is not supported",
+  ]);
+});
+
+Deno.test("opt-in omits absent and blank values but preserves static fallback", () => {
+  const text = `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+http_headers = { "X-Fallback" = "static-fallback" }
+env_http_headers = { "x-fallback" = "DUMMY_SECRET", "X-Only-Env" = "DUMMY_SECRET" }
+`;
+  for (const value of [undefined, "", "  \t  "]) {
+    const parsed = parseCodexToml(text, {
+      allowEnvHttpHeaders: true,
+      getEnv: () => value,
+    });
+    assert.deepEqual(parsed.diagnostics, []);
+    assert.deepEqual(parsed.servers, [{
+      name: "remote",
+      config: {
+        type: "remote",
+        url: "https://example.com/mcp",
+        headers: { "X-Fallback": "static-fallback" },
+      },
+    }]);
+  }
+});
+
+Deno.test("opt-in overrides static headers case-insensitively without trimming nonblank values", () => {
+  const parsed = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+http_headers = { "X-Fallback" = "static-fallback", "X-Other" = "other" }
+env_http_headers = { "x-fallback" = "DUMMY_SECRET", "X-Only-Env" = "DUMMY_SECRET" }
+`,
+    { allowEnvHttpHeaders: true, getEnv: () => "  dummy-value  " },
+  );
+  assert.deepEqual(parsed.diagnostics, []);
+  assert.deepEqual(parsed.servers, [{
+    name: "remote",
+    config: {
+      type: "remote",
+      url: "https://example.com/mcp",
+      headers: {
+        "X-Other": "other",
+        "x-fallback": "  dummy-value  ",
+        "X-Only-Env": "  dummy-value  ",
+      },
+    },
+  }]);
+});
+
+Deno.test("opt-in rejects malformed maps and skips invalid header values without exposing them", () => {
+  const badMap = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+env_http_headers = { "X-Only-Env" = 123 }
+`,
+    { allowEnvHttpHeaders: true },
+  );
+  assert.deepEqual(badMap.servers, []);
+  assert.equal(badMap.diagnostics.length, 1);
+
+  const badValue = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+http_headers = { "X-Fallback" = "static-fallback" }
+env_http_headers = { "X-Fallback" = "DUMMY_SECRET" }
+`,
+    { allowEnvHttpHeaders: true, getEnv: () => "secret\ninvalid" },
+  );
+  assert.deepEqual(badValue.servers, [{
+    name: "remote",
+    config: {
+      type: "remote",
+      url: "https://example.com/mcp",
+      headers: { "X-Fallback": "static-fallback" },
+    },
+  }]);
+  assert.equal(badValue.diagnostics.join(" ").includes("secret"), false);
+  assert.equal(badValue.diagnostics.length, 1);
+});

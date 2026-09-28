@@ -63,7 +63,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 }
 ```
 
-Codex の stdio では `command` / `args` / `env` / `cwd`、remote では `url` / `http_headers` を扱う。`env_http_headers` は環境変数が未設定・空の場合や同名の静的ヘッダーとの重複時の挙動を検証する必要があるため、別の実装タスクに分ける。`bearer_token_env_var`、`http_headers_helper` など、未対応の認証設定を持つサーバーは無視して診断を出し、認証なしの定義に変換しない。
+Codex の stdio では `command` / `args` / `env` / `cwd`、remote では `url` / `http_headers` を扱う。`env_http_headers` は `options.allowCodexEnvHttpHeaders` が明示的に `true` の場合だけ取り込み、既定ではその項目を持つサーバー定義全体をスキップする。有効時は OpenCode プロセスの環境変数を起動時に読み、未設定・空白の場合は追加ヘッダーを省略し、値がある場合は同名の静的ヘッダーより優先する。Codex の秘密値隔離ポリシーは再現せず、リスクと適用範囲を README に記載する。`bearer_token_env_var`、`http_headers_helper` など、未対応の認証設定を持つサーバーは無視して診断を出し、認証なしの定義に変換しない。
 
 ## 対応MCP
 
@@ -176,7 +176,7 @@ OpenCode V2 Pluginとしてnpm packageで配布する。
 
 変換処理はOpenCode本体を起動せずunit testできるよう分離する。
 
-Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ不正なサーバー定義をテストする。`http_headers` は OpenCode 経由の受信確認も行う。`env_http_headers` の動作確認はその実装タスクで行う。
+Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ不正なサーバー定義をテストする。静的な `http_headers` と opt-in の `env_http_headers` は OpenCode 経由の受信確認も行う。`env_http_headers` は無効時のサーバー単位のスキップ、有効時の未設定・空白・静的ヘッダーとの衝突をテストする。
 
 ## セキュリティ
 

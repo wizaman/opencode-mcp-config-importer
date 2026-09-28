@@ -1,0 +1,5 @@
+# Dummy-only fixture: the variable name is not a credential.
+[mcp_servers.env-probe]
+url = "http://localhost:3001/mcp"
+http_headers = { "X-Fallback" = "static-fallback" }
+env_http_headers = { "x-fallback" = "ADAPTER_ENV_HEADER_PROBE", "X-Only-Env" = "ADAPTER_ENV_HEADER_PROBE" }
