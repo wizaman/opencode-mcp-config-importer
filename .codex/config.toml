@@ -1,0 +1,17 @@
+# Project-local MCP servers for Codex and future adapter verification.
+# Codex loads this file only when the project is trusted.
+
+# Shares a name with .mcp.json; the marker lets tests distinguish the sources.
+[mcp_servers.everything-stdio]
+command = "deno"
+args = ["x", "-A", "-y", "npm:@modelcontextprotocol/server-everything"]
+env = { MCP_CONFIG_SOURCE = "codex" }
+
+[mcp_servers.codex-stdio]
+command = "deno"
+args = ["x", "-A", "-y", "npm:@modelcontextprotocol/server-everything"]
+
+# Requires the Everything Streamable HTTP server to be running on port 3001.
+[mcp_servers.codex-remote]
+url = "http://localhost:3001/mcp"
+http_headers = { "X-Test-Source" = "codex" }

@@ -1,4 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["./src"]
+  "plugins": [
+    { "package": "./src", "options": { "sources": ["mcp-json", "codex"] } }
+  ]
 }
