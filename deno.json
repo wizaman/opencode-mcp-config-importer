@@ -5,7 +5,7 @@
   },
   "tasks": {
     "check": "deno check src tests scripts",
-    "test": "deno test --allow-read --allow-write --allow-env=ADAPTER_ENV_HEADER_PROBE",
+    "test": "deno test --allow-read --allow-write --allow-env=ADAPTER_ENV_HEADER_PROBE,ADAPTER_BEARER_HEADER_PROBE",
     "smoke:remote": "deno run -A scripts/smoke-remote.ts",
     "smoke:codex-headers": "deno run -A scripts/smoke-codex-headers.ts",
     "smoke:codex-env-headers": "deno run -A scripts/smoke-codex-env-headers.ts",

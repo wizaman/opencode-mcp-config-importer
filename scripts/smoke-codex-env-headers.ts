@@ -8,6 +8,7 @@ const host = "127.0.0.1";
 const mcpPort = 3001;
 const apiPort = 4097;
 const variable = "ADAPTER_ENV_HEADER_PROBE";
+const bearerVariable = "ADAPTER_BEARER_HEADER_PROBE";
 const marker = "dummy-env-header-value";
 const decoder = new TextDecoder();
 
@@ -68,6 +69,7 @@ async function run(
     : undefined;
   const directory = await Deno.makeTempDir({ dir: temp, prefix: "mcp-env-" });
   let captured: { fallback: string | null; only: string | null } | undefined;
+  let bearerCaptured: string | null | undefined;
   let server: Deno.HttpServer | undefined;
   let child: Deno.ChildProcess | undefined;
   try {
@@ -119,10 +121,14 @@ async function run(
           return new Response(null, { status: 400 });
         }
         if (message.method === "initialize") {
-          captured = {
-            fallback: request.headers.get("X-Fallback"),
-            only: request.headers.get("X-Only-Env"),
-          };
+          if (request.headers.get("X-Probe") === "bearer") {
+            bearerCaptured = request.headers.get("Authorization");
+          } else {
+            captured = {
+              fallback: request.headers.get("X-Fallback"),
+              only: request.headers.get("X-Only-Env"),
+            };
+          }
         }
         if (message.id === undefined) {
           return new Response(null, { status: 202 });
@@ -157,6 +163,7 @@ async function run(
         XDG_CONFIG_HOME: join(directory, "config"),
         XDG_DATA_HOME: join(directory, "data"),
         ...(value === undefined ? {} : { [variable]: value }),
+        ...(value === undefined ? {} : { [bearerVariable]: value }),
       },
       stdin: "null",
       stdout: "null",
@@ -184,13 +191,28 @@ async function run(
         };
         const status = mcp.data?.find((item) => item.name === "env-probe")
           ?.status?.status;
+        const bearerStatus = mcp.data?.find((item) =>
+          item.name === "bearer-probe"
+        )
+          ?.status?.status;
         if (status === "failed") throw new Error("env-probe connection failed");
-        if (status === "connected" && captured) {
+        if (bearerStatus === "failed") {
+          throw new Error("bearer-probe connection failed");
+        }
+        if (
+          status === "connected" && captured &&
+          (value === undefined || !value.trim()
+            ? bearerStatus === undefined
+            : bearerStatus === "connected" && bearerCaptured !== undefined)
+        ) {
           assert.deepEqual(
             captured,
             expected,
             `${label}: unexpected received headers`,
           );
+          if (value !== undefined && value.trim()) {
+            assert.equal(bearerCaptured, `Bearer ${value}`);
+          }
           const config = await fetch(`http://${host}:${apiPort}/api/config`, {
             headers: auth,
             signal: AbortSignal.timeout(2000),
@@ -200,7 +222,7 @@ async function run(
             !(await config.text()).includes(marker),
             "dummy value exposed in config API",
           );
-          console.log(`PASS: ${label}: env-probe connected; headers match`);
+          console.log(`PASS: ${label}: env and bearer headers match`);
           return;
         }
       }
@@ -215,9 +237,12 @@ async function run(
 }
 
 try {
-  if (Deno.env.get(variable) !== undefined) {
+  if (
+    Deno.env.get(variable) !== undefined ||
+    Deno.env.get(bearerVariable) !== undefined
+  ) {
     throw new Error(
-      `${variable} is already set; no existing environment was changed`,
+      `A probe environment variable is already set; no existing environment was changed`,
     );
   }
   available(mcpPort);

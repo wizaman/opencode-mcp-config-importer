@@ -3,3 +3,9 @@
 url = "http://localhost:3001/mcp"
 http_headers = { "X-Fallback" = "static-fallback" }
 env_http_headers = { "x-fallback" = "ADAPTER_ENV_HEADER_PROBE", "X-Only-Env" = "ADAPTER_ENV_HEADER_PROBE" }
+
+[mcp_servers.bearer-probe]
+url = "http://localhost:3001/mcp"
+http_headers = { "authorization" = "static", "X-Probe" = "bearer" }
+env_http_headers = { "AUTHORIZATION" = "ADAPTER_ENV_HEADER_PROBE" }
+bearer_token_env_var = "ADAPTER_BEARER_HEADER_PROBE"
