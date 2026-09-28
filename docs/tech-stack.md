@@ -75,6 +75,8 @@ runtime dependenciesは最小化する。
 
 初期実装では、構造が単純ならZod / Valibot等のschema libraryを導入せず、必要最小限のvalidationを手書きする。
 
+Codex の `.codex/config.toml` 対応には TOML パーサーとして npm package の `smol-toml` を使用する。OpenCode の実行環境でも使う依存関係として `package.json` に置き、Deno の設定と二重管理しない。パーサーの出力に対する MCP 定義の検証は、既存の JSON 入力と同様にプラグイン側で行う。
+
 ## Testing
 
 Deno標準のtest runnerを使用する。

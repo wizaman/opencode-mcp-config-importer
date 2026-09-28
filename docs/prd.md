@@ -12,7 +12,7 @@ OpenCode固有の `opencode.jsonc` にMCP設定を重複記述する必要をな
 - V1互換は提供しない。
 - OpenCodeが既にネイティブ対応している機能は再実装しない。
 - Claude Code等、特定ハーネス全体との互換性は目的にしない。
-- `.mcp.json` → OpenCode MCP設定、という単一責務に限定する。
+- 責務はプロジェクトローカルの MCP 設定の取り込みに限定する。
 - 元の `.mcp.json` を正本とし、変換済みファイルは生成しない。
 - OpenCodeの設定ファイルを書き換えない。
 - 起動時のインメモリ変換だけで完結させる。
@@ -44,6 +44,27 @@ OpenCode固有の `opencode.jsonc` にMCP設定を重複記述する必要をな
 
 ユーザーグローバルな独自 `.mcp.json` 配置規約は設けない。
 
+### Codex のプロジェクト設定
+
+既存の `.mcp.json` 対応を維持しつつ、プロジェクトルート直下の `.codex/config.toml` にあるトップレベルの `[mcp_servers]` を取り込む。親ディレクトリの探索、ユーザー共通設定の読み込み、Codex の設定レイヤーの再現は行わない。モデル、sandbox、approval、profiles など MCP 以外の設定は対象外とする。Codex におけるプロジェクトの信頼判定は OpenCode の設定読み込みには引き継がず、別のメンタルモデルとして扱う。
+
+OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略時は `["mcp-json"]` とし、Codex 設定は `"codex"` を指定した場合だけ読む。例えば `sources: ["mcp-json", "codex"]` は両方を有効にする。グローバルプラグインで opt-in した場合は、その設定が適用される各プロジェクトの `.codex/config.toml` も読み込み対象になる。プラグイン名と ID の変更は別タスクで検討する。
+
+設定例（パッケージ名は現行のまま記載）:
+
+```jsonc
+{
+  "plugins": [
+    {
+      "package": "opencode-mcp-json-adapter",
+      "options": { "sources": ["mcp-json", "codex"] }
+    }
+  ]
+}
+```
+
+Codex の stdio では `command` / `args` / `env` / `cwd`、remote では `url` / `http_headers` を扱う。`env_http_headers` は環境変数が未設定・空の場合や同名の静的ヘッダーとの重複時の挙動を検証する必要があるため、別の実装タスクに分ける。`bearer_token_env_var`、`http_headers_helper` など、未対応の認証設定を持つサーバーは無視して診断を出し、認証なしの定義に変換しない。
+
 ## 対応MCP
 
 最低限以下を扱う。
@@ -67,19 +88,16 @@ OAuth等、OpenCode固有の高度な設定を `.mcp.json` 側から推測しな
 
 概念的には以下とする。
 
-```text
-.mcp.json
-    ↓
-parse / validate
-    ↓
-internal representation
-    ↓
-OpenCode V2 adapter
-    ↓
-MCP registry
+```mermaid
+flowchart LR
+    A[.mcp.json] --> C[解析・検証]
+    B[.codex/config.toml: opt-in] --> C
+    C --> D[入力元の優先順位を適用]
+    D --> E[OpenCode V2 MCP transform]
+    E --> F[MCP registry]
 ```
 
-内部表現は実装を単純化する場合のみ導入し、抽象化のための抽象化は避ける。
+独立した内部表現は設けず、解析済みの定義を共通の MCP transform に渡す。
 
 ## OpenCode統合
 
@@ -98,6 +116,8 @@ OpenCodeネイティブ設定を優先する。
 同じserver nameが `.mcp.json` と `opencode.jsonc` の両方に存在する場合は、`opencode.jsonc` 側を採用する。
 
 `.mcp.json` はfallback/import sourceとして扱う。
+
+Codex を有効化した場合も OpenCode ネイティブ設定を最優先する。import 元同士で同名サーバーがある場合は `sources` の先に書いた入力元の有効な定義を採用し、通常は衝突警告を出さない。設定上の優先順位をエージェント向けの警告に依存させない。
 
 ## エラー処理
 
@@ -155,6 +175,8 @@ OpenCode V2 Pluginとしてnpm packageで配布する。
 - Unix向けcommand/path
 
 変換処理はOpenCode本体を起動せずunit testできるよう分離する。
+
+Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ不正なサーバー定義をテストする。`http_headers` は OpenCode 経由の受信確認も行う。`env_http_headers` の動作確認はその実装タスクで行う。
 
 ## セキュリティ
 

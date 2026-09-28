@@ -1,7 +1,28 @@
 # opencode-mcp-json-adapter
-プロジェクトルートの `.mcp.json` を OpenCode の MCP 設定に取り込むプラグインです。
+プロジェクトルートの `.mcp.json` を OpenCode V2 の MCP 設定に取り込むプラグインです。明示的に有効化した場合は `.codex/config.toml` の `[mcp_servers]` も取り込みます。
+
+## Codex 設定の取り込み
+
+既定では `.mcp.json` のみを読みます。Codex 設定を併用する場合は OpenCode V2 の `opencode.jsonc` で次のように指定します。このリポジトリの `opencode.jsonc` は動作確認のため両方を有効化済みです。
+
+```jsonc
+{
+  "plugins": [
+    {
+      "package": "./src",
+      "options": { "sources": ["mcp-json", "codex"] }
+    }
+  ]
+}
+```
+
+`codex` はプロジェクトルート直下の `.codex/config.toml` のトップレベルの `[mcp_servers]` だけを読みます。対応項目は stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers` です。`enabled = false` のサーバーは取り込みません。`env_http_headers` や Codex 固有の認証設定は未対応で、そのサーバー定義は取り込みません。Codex の trust 判定や他の設定レイヤーは再現しません。OpenCode ネイティブの同名設定を優先し、入力元同士の衝突では `sources` の先に書いた入力元の有効な定義を採用します。通常は衝突を警告しません。
+
+ヘッダーの実送信は、ポート 3001・4097 が空いている状態で `deno task smoke:codex-headers` を実行すると確認できます。この手動テストは OpenCode V2 の別インスタンスと受信用 MCP サーバーを起動し、`.codex/config.toml` の `X-Test-Source: codex` が届くことを確認して、起動したプロセスだけを停止します。モデルは使用せず、`deno test` や CI には含めません。
 
 ## remote MCP のローカル動作確認
+
+Codex や OpenCode から手動で接続する場合は、別のターミナルで `deno task remote:serve` を実行してください。Everything MCP の Streamable HTTP サーバーだけをポート 3001 で起動し、`.codex/config.toml` の `codex-remote` と `.mcp.json` の `everything-remote` が接続できます。確認後はそのターミナルで Ctrl+C を押して停止します。ポート 3001 が使用中なら起動できないため、次の `smoke:remote` とは同時に実行しないでください。このタスクは `deno test` や CI では実行しません。
 
 プロジェクトルートで `deno task smoke:remote` を実行します。この手動テストは `deno test` や CI の対象外です。Deno、OpenCode V2 の実行ファイル（`opencode2` を優先し、見つからない場合のみ V2 と確認できた `opencode` を使用）、Everything MCP の npm パッケージへのアクセスが必要です。ポート 3001 と 4097 は空けておいてください。
 
