@@ -1,6 +1,10 @@
 # opencode-mcp-json-adapter
 プロジェクトルートの `.mcp.json` を OpenCode V2 の MCP 設定に取り込むプラグインです。明示的に有効化した場合は `.codex/config.toml` の `[mcp_servers]` も取り込みます。
 
+対応する transport は stdio と Streamable HTTP です。旧式の HTTP+SSE transport（`.mcp.json` の `type: "sse"` など）は意図的に取り込みません。MCP 2026-07-28 仕様で旧式の HTTP+SSE transport が非推奨となったためです。Streamable HTTP 内で使われる SSE レスポンスとは別の話です。[^mcp-2026-07-28]
+
+[^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
+
 ## Codex 設定の取り込み
 
 既定では `.mcp.json` のみを読みます。Codex 設定を併用する場合は OpenCode V2 の `opencode.jsonc` で次のように指定します。このリポジトリの `opencode.jsonc` は動作確認のため両方を有効化済みです。

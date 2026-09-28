@@ -84,6 +84,10 @@ Codex の stdio では `command` / `args` / `env` / `cwd`、remote では `url` 
 
 OAuth等、OpenCode固有の高度な設定を `.mcp.json` 側から推測しない。
 
+旧式の HTTP+SSE transport は取り込み対象外とする。MCP 2026-07-28 仕様で非推奨となったため、新たな変換対象には加えない。これは Streamable HTTP のレスポンスで使われる SSE を除外するという意味ではない。[^mcp-2026-07-28]
+
+[^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
+
 ## 変換
 
 概念的には以下とする。
