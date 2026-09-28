@@ -1,29 +1,65 @@
 import { Plugin } from "@opencode/plugin";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { parseCodexToml } from "./codex_toml.ts";
 import { parseMcpJson } from "./mcp_json.ts";
+
+type Source = "mcp-json" | "codex";
+const sourceFiles: Record<Source, string> = {
+  "mcp-json": ".mcp.json",
+  codex: join(".codex", "config.toml"),
+};
+
+function sources(value: unknown): Source[] | undefined {
+  if (value === undefined) return ["mcp-json"];
+  if (
+    !Array.isArray(value) ||
+    !value.every((source) => source === "mcp-json" || source === "codex")
+  ) return;
+  return [...new Set(value)];
+}
 
 export default Plugin.define({
   id: "opencode-mcp-json-adapter",
   async setup(ctx) {
-    const path = join(ctx.location.project.directory, ".mcp.json");
-    let text: string;
-    try {
-      text = await readFile(path, "utf8");
-    } catch (error) {
-      if (isNotFound(error)) return;
-      console.warn(`[opencode-mcp-json-adapter] ${path}: failed to read file`);
+    const selected = sources(ctx.options?.sources);
+    if (!selected) {
+      console.warn(
+        "[opencode-mcp-json-adapter] options.sources must be an array of mcp-json and/or codex",
+      );
       return;
     }
+    const servers = new Map<
+      string,
+      ReturnType<typeof parseMcpJson>["servers"][number]["config"]
+    >();
+    for (const source of selected) {
+      const path = join(ctx.location.project.directory, sourceFiles[source]);
+      let text: string;
+      try {
+        text = await readFile(path, "utf8");
+      } catch (error) {
+        if (isNotFound(error)) continue;
+        console.warn(
+          `[opencode-mcp-json-adapter] ${path}: failed to read file`,
+        );
+        continue;
+      }
 
-    const { servers, diagnostics } = parseMcpJson(text);
-    for (const diagnostic of diagnostics) {
-      console.warn(`[opencode-mcp-json-adapter] ${path}: ${diagnostic}`);
+      const result = source === "mcp-json"
+        ? parseMcpJson(text)
+        : parseCodexToml(text);
+      for (const diagnostic of result.diagnostics) {
+        console.warn(`[opencode-mcp-json-adapter] ${path}: ${diagnostic}`);
+      }
+      for (const { name, config } of result.servers) {
+        if (!servers.has(name)) servers.set(name, config);
+      }
     }
-    if (servers.length === 0) return;
+    if (servers.size === 0) return;
 
     await ctx.mcp.transform((editor) => {
-      for (const { name, config } of servers) {
+      for (const [name, config] of servers) {
         if (editor.get(name) === undefined) editor.set(name, config);
       }
     });

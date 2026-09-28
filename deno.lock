@@ -1,7 +1,8 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@opencode/plugin@^2.0.16": "2.0.16_@opentelemetry+semantic-conventions@1.43.0_redis@6.2.1"
+    "npm:@opencode/plugin@^2.0.16": "2.0.16_@opentelemetry+semantic-conventions@1.43.0_redis@6.2.1",
+    "npm:smol-toml@^1.9.0": "1.9.0"
   },
   "npm": {
     "@ai-sdk/provider@3.0.8": {
@@ -1607,6 +1608,9 @@
     "smart-buffer@4.2.0": {
       "integrity": "sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg=="
     },
+    "smol-toml@1.9.0": {
+      "integrity": "sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ=="
+    },
     "socks-proxy-agent@8.0.5": {
       "integrity": "sha512-HehCEsotFqbPW9sJ8WVYB6UbmIMv7kUUORIF2Nncq4VQvBfNBLibW9YZR5dlYCSUhwcD628pRllm7n+E+YTzJw==",
       "dependencies": [
@@ -1773,7 +1777,8 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@opencode/plugin@^2.0.16"
+        "npm:@opencode/plugin@^2.0.16",
+        "npm:smol-toml@^1.9.0"
       ]
     }
   }
