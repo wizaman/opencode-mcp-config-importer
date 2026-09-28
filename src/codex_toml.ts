@@ -56,7 +56,6 @@ export function parseCodexToml(
     if (value.enabled === false) continue;
     // Do not silently drop unsupported authentication settings.
     const unsupported = [
-      "bearer_token_env_var",
       "bearer_token",
       "http_headers_helper",
       "auth",
@@ -67,8 +66,15 @@ export function parseCodexToml(
       result.diagnostics.push(`${field}.${unsupported} is not supported`);
       continue;
     }
-    if (value.env_http_headers !== undefined && !options.allowEnvHttpHeaders) {
-      result.diagnostics.push(`${field}.env_http_headers is not supported`);
+    if (
+      (value.env_http_headers !== undefined ||
+        value.bearer_token_env_var !== undefined) &&
+      options.allowEnvHttpHeaders !== true
+    ) {
+      const key = value.bearer_token_env_var !== undefined
+        ? "bearer_token_env_var"
+        : "env_http_headers";
+      result.diagnostics.push(`${field}.${key} is not supported`);
       continue;
     }
     if (value.url !== undefined) {
@@ -97,9 +103,32 @@ export function parseCodexToml(
         );
         continue;
       }
+      if (
+        value.bearer_token_env_var !== undefined &&
+        (typeof value.bearer_token_env_var !== "string" ||
+          !value.bearer_token_env_var.trim())
+      ) {
+        result.diagnostics.push(
+          `${field}.bearer_token_env_var must be a non-empty string`,
+        );
+        continue;
+      }
       const headers = { ...(value.http_headers ?? {}) };
+      const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
+      const setHeader = (name: string, resolved: string) => {
+        for (const existing of Object.keys(headers)) {
+          if (existing.toLowerCase() === name.toLowerCase()) {
+            delete headers[existing];
+          }
+        }
+        Object.defineProperty(headers, name, {
+          value: resolved,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      };
       if (value.env_http_headers !== undefined) {
-        const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
         for (const [name, variable] of Object.entries(value.env_http_headers)) {
           let resolved: string | undefined;
           try {
@@ -120,33 +149,51 @@ export function parseCodexToml(
             );
             continue;
           }
-          for (const existing of Object.keys(headers)) {
-            if (existing.toLowerCase() === name.toLowerCase()) {
-              delete headers[existing];
-            }
-          }
-          Object.defineProperty(headers, name, {
-            value: resolved,
-            enumerable: true,
-            writable: true,
-            configurable: true,
-          });
+          setHeader(name, resolved);
         }
+      }
+      if (value.bearer_token_env_var !== undefined) {
+        let token: string | undefined;
+        try {
+          token = getEnv(value.bearer_token_env_var);
+        } catch {
+          // Codex fails the connection when its configured bearer credential is missing.
+        }
+        if (token === undefined || !token.trim()) {
+          result.diagnostics.push(
+            `${field}.bearer_token_env_var is not available`,
+          );
+          continue;
+        }
+        const authorization = `Bearer ${token}`;
+        try {
+          new Headers().set("Authorization", authorization);
+        } catch {
+          result.diagnostics.push(
+            `${field}.bearer_token_env_var has an invalid value`,
+          );
+          continue;
+        }
+        setHeader("Authorization", authorization);
       }
       const config: Mcp.ServerConfig = {
         type: "remote",
         url: value.url,
         ...(value.http_headers === undefined &&
-            value.env_http_headers === undefined
+            value.env_http_headers === undefined &&
+            value.bearer_token_env_var === undefined
           ? {}
           : { headers }),
       };
       result.servers.push({ name, config });
       continue;
     }
-    if (value.env_http_headers !== undefined) {
+    if (
+      value.env_http_headers !== undefined ||
+      value.bearer_token_env_var !== undefined
+    ) {
       result.diagnostics.push(
-        `${field}.env_http_headers requires a remote server`,
+        `${field}: environment-based HTTP headers require a remote server`,
       );
       continue;
     }

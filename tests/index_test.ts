@@ -73,6 +73,8 @@ Deno.test("env HTTP headers require an explicit boolean opt-in", async () => {
   );
   const variable = "ADAPTER_ENV_HEADER_PROBE";
   const original = Deno.env.get(variable);
+  const bearerVariable = "ADAPTER_BEARER_HEADER_PROBE";
+  const originalBearer = Deno.env.get(bearerVariable);
   const originalWarn = console.warn;
   const warnings: string[] = [];
   async function definitions(options: Record<string, unknown>) {
@@ -97,18 +99,22 @@ Deno.test("env HTTP headers require an explicit boolean opt-in", async () => {
     console.warn = (...args: unknown[]) =>
       warnings.push(args.map(String).join(" "));
     Deno.env.set(variable, "dummy-value");
+    Deno.env.set(bearerVariable, "dummy-token");
     const disabled = await definitions({ sources: ["codex"] });
     assert.equal(disabled.has("env-probe"), false);
+    assert.equal(disabled.has("bearer-probe"), false);
     const fallback = await definitions({ sources: ["codex", "mcp-json"] });
     assert.deepEqual(fallback.get("env-probe"), {
       type: "local",
       command: ["fallback-server"],
     });
+    assert.deepEqual(fallback.get("bearer-probe"), fallback.get("env-probe"));
     const invalid = await definitions({
       sources: ["codex", "mcp-json"],
       allowCodexEnvHttpHeaders: "true",
     });
     assert.deepEqual(invalid.get("env-probe"), fallback.get("env-probe"));
+    assert.deepEqual(invalid.get("bearer-probe"), fallback.get("bearer-probe"));
     const enabled = await definitions({
       sources: ["codex", "mcp-json"],
       allowCodexEnvHttpHeaders: true,
@@ -118,6 +124,17 @@ Deno.test("env HTTP headers require an explicit boolean opt-in", async () => {
       url: "http://localhost:3001/mcp",
       headers: { "x-fallback": "dummy-value", "X-Only-Env": "dummy-value" },
     });
+    assert.deepEqual(enabled.get("bearer-probe"), {
+      type: "remote",
+      url: "http://localhost:3001/mcp",
+      headers: { "X-Probe": "bearer", Authorization: "Bearer dummy-token" },
+    });
+    Deno.env.delete(bearerVariable);
+    const missing = await definitions({
+      sources: ["codex", "mcp-json"],
+      allowCodexEnvHttpHeaders: true,
+    });
+    assert.deepEqual(missing.get("bearer-probe"), fallback.get("bearer-probe"));
     assert(
       warnings.some((message) => message.includes("allowCodexEnvHttpHeaders")),
     );
@@ -126,6 +143,8 @@ Deno.test("env HTTP headers require an explicit boolean opt-in", async () => {
     console.warn = originalWarn;
     if (original === undefined) Deno.env.delete(variable);
     else Deno.env.set(variable, original);
+    if (originalBearer === undefined) Deno.env.delete(bearerVariable);
+    else Deno.env.set(bearerVariable, originalBearer);
   }
 });
 

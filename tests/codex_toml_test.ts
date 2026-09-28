@@ -175,3 +175,92 @@ env_http_headers = { "X-Fallback" = "DUMMY_SECRET" }
   assert.equal(badValue.diagnostics.join(" ").includes("secret"), false);
   assert.equal(badValue.diagnostics.length, 1);
 });
+
+Deno.test("bearer shorthand is disabled by default without reading the environment", () => {
+  const parsed = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+http_headers = { Authorization = "static" }
+bearer_token_env_var = "DUMMY_TOKEN"
+`,
+    {
+      getEnv: () => {
+        throw new Error("must not read environment");
+      },
+    },
+  );
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, [
+    "mcp_servers.remote.bearer_token_env_var is not supported",
+  ]);
+});
+
+Deno.test("opt-in skips the whole bearer server when its token is absent or blank", () => {
+  const text = `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+http_headers = { Authorization = "static" }
+bearer_token_env_var = "DUMMY_TOKEN"
+`;
+  for (const value of [undefined, "", "  \t  "]) {
+    const parsed = parseCodexToml(text, {
+      allowEnvHttpHeaders: true,
+      getEnv: () => value,
+    });
+    assert.deepEqual(parsed.servers, []);
+    assert.deepEqual(parsed.diagnostics, [
+      "mcp_servers.remote.bearer_token_env_var is not available",
+    ]);
+  }
+});
+
+Deno.test("bearer shorthand overrides static and env Authorization regardless of casing", () => {
+  const parsed = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+http_headers = { authorization = "static", "X-Other" = "other" }
+env_http_headers = { AUTHORIZATION = "DUMMY_HEADER" }
+bearer_token_env_var = "DUMMY_TOKEN"
+`,
+    {
+      allowEnvHttpHeaders: true,
+      getEnv: (name) =>
+        name === "DUMMY_TOKEN" ? "dummy-token" : "Bearer env-value",
+    },
+  );
+  assert.deepEqual(parsed, {
+    diagnostics: [],
+    servers: [{
+      name: "remote",
+      config: {
+        type: "remote",
+        url: "https://example.com/mcp",
+        headers: { "X-Other": "other", Authorization: "Bearer dummy-token" },
+      },
+    }],
+  });
+});
+
+Deno.test("invalid bearer configuration or token does not expose credentials", () => {
+  const invalid = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+bearer_token_env_var = 123
+`,
+    { allowEnvHttpHeaders: true },
+  );
+  assert.deepEqual(invalid.servers, []);
+  const badValue = parseCodexToml(
+    `
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+bearer_token_env_var = "DUMMY_TOKEN"
+`,
+    { allowEnvHttpHeaders: true, getEnv: () => "secret\ninvalid" },
+  );
+  assert.deepEqual(badValue.servers, []);
+  assert.equal(badValue.diagnostics.join(" ").includes("secret"), false);
+});

@@ -1,5 +1,6 @@
 {
   "mcpServers": {
-    "env-probe": { "command": "fallback-server" }
+    "env-probe": { "command": "fallback-server" },
+    "bearer-probe": { "command": "fallback-server" }
   }
 }

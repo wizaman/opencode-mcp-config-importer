@@ -63,7 +63,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 }
 ```
 
-Codex の stdio では `command` / `args` / `env` / `cwd`、remote では `url` / `http_headers` を扱う。`env_http_headers` は `options.allowCodexEnvHttpHeaders` が明示的に `true` の場合だけ取り込み、既定ではその項目を持つサーバー定義全体をスキップする。有効時は OpenCode プロセスの環境変数を起動時に読み、未設定・空白の場合は追加ヘッダーを省略し、値がある場合は同名の静的ヘッダーより優先する。Codex の秘密値隔離ポリシーは再現せず、リスクと適用範囲を README に記載する。`bearer_token_env_var`、`http_headers_helper` など、未対応の認証設定を持つサーバーは無視して診断を出し、認証なしの定義に変換しない。
+Codex の stdio では `command` / `args` / `env` / `cwd`、remote では `url` / `http_headers` を扱う。`env_http_headers` と `bearer_token_env_var` は `options.allowCodexEnvHttpHeaders` が明示的に `true` の場合だけ取り込み、既定ではいずれかを持つサーバー定義全体をスキップする。Bearer は任意の環境変数由来の HTTP ヘッダーと同じ opt-in にまとめ、OAuth 機能としては扱わない。有効時は OpenCode プロセスの環境変数を起動時に読み、`env_http_headers` は未設定・空白なら追加ヘッダーを省略して同名の静的ヘッダーより優先する。`bearer_token_env_var` は値から `Authorization: Bearer <値>` を組み立て、静的・環境変数由来の `Authorization` より優先する。Bearer の値が未設定・空白・不正な場合は、認証なしで接続しないようサーバー定義全体をスキップする。Codex の秘密値隔離ポリシーは再現せず、リスクと適用範囲を README に記載する。`http_headers_helper` など、未対応の認証設定を持つサーバーは無視して診断を出し、認証なしの定義に変換しない。
 
 ## 対応MCP
 
@@ -83,6 +83,10 @@ Codex の stdio では `command` / `args` / `env` / `cwd`、remote では `url` 
 - headers
 
 OAuth等、OpenCode固有の高度な設定を `.mcp.json` 側から推測しない。
+
+旧式の HTTP+SSE transport は取り込み対象外とする。MCP 2026-07-28 仕様で非推奨となったため、新たな変換対象には加えない。これは Streamable HTTP のレスポンスで使われる SSE を除外するという意味ではない。[^mcp-2026-07-28]
+
+[^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 
 ## 変換
 
@@ -176,7 +180,7 @@ OpenCode V2 Pluginとしてnpm packageで配布する。
 
 変換処理はOpenCode本体を起動せずunit testできるよう分離する。
 
-Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ不正なサーバー定義をテストする。静的な `http_headers` と opt-in の `env_http_headers` は OpenCode 経由の受信確認も行う。`env_http_headers` は無効時のサーバー単位のスキップ、有効時の未設定・空白・静的ヘッダーとの衝突をテストする。
+Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ不正なサーバー定義をテストする。静的な `http_headers` と opt-in の `env_http_headers` / `bearer_token_env_var` は OpenCode 経由の受信確認も行う。環境変数由来のヘッダーは無効時のサーバー単位のスキップ、有効時の未設定・空白・静的ヘッダーとの衝突をテストする。
 
 ## セキュリティ
 

@@ -71,4 +71,4 @@ flowchart LR
 
 Codex の TOML 解析には `smol-toml` を使用する。`src/codex_toml.ts` はサーバー単位で検証し、stdio の `command` / `args` / `env` / `cwd` を local 定義へ、remote の `url` / `http_headers` を remote 定義へ変換する。両方の入力元を `src/index.ts` で順に読み込み、同じ MCP transform で登録する。独立した内部表現は設けない。未対応の認証設定を持つサーバーは取り込まない。
 
-`env_http_headers` は明示オプション `allowCodexEnvHttpHeaders: true` でのみ取り込む。無効時は該当サーバーを定義ごとスキップし、先勝ちの優先順位では次の有効な定義が採用可能となる。有効時はプラグインが OpenCode プロセスの環境変数を起動時に読み、空白だけの値は追加せず、値があれば大文字・小文字を区別せず静的ヘッダーに優先させる。プラグインの MCP transform に渡した `{env:NAME}` は OpenCode V2.0.18 では展開されないため、値を直接登録する。この値が `/api/config` や `/api/mcp` に現れないことはダミー値で検証するが、秘密値隔離の保証とはみなさない。
+`env_http_headers` と `bearer_token_env_var` は明示オプション `allowCodexEnvHttpHeaders: true` でのみ取り込む。無効時は該当サーバーを定義ごとスキップし、先勝ちの優先順位では次の有効な定義が採用可能となる。有効時はプラグインが OpenCode プロセスの環境変数を起動時に読む。`env_http_headers` は空白だけの値を追加せず、値があれば大文字・小文字を区別せず静的ヘッダーに優先させる。Bearer は値から `Authorization: Bearer <値>` を生成し、同名の静的・環境変数由来のヘッダーより優先する。Bearer の値が未設定・空白・不正ならサーバーを登録しない。プラグインの MCP transform に渡した `{env:NAME}` は OpenCode V2.0.18 では展開されないため、値を直接登録する。この値が `/api/config` や `/api/mcp` に現れないことはダミー値で検証するが、秘密値隔離の保証とはみなさない。
