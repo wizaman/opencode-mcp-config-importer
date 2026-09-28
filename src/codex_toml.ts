@@ -19,7 +19,15 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-export function parseCodexToml(text: string): ParseResult {
+interface CodexOptions {
+  allowEnvHttpHeaders?: boolean;
+  getEnv?: (name: string) => string | undefined;
+}
+
+export function parseCodexToml(
+  text: string,
+  options: CodexOptions = {},
+): ParseResult {
   const result: ParseResult = { servers: [], diagnostics: [] };
   let input: unknown;
   try {
@@ -46,9 +54,8 @@ export function parseCodexToml(text: string): ParseResult {
       continue;
     }
     if (value.enabled === false) continue;
-    // Do not silently drop authentication or environment-based headers.
+    // Do not silently drop unsupported authentication settings.
     const unsupported = [
-      "env_http_headers",
       "bearer_token_env_var",
       "bearer_token",
       "http_headers_helper",
@@ -58,6 +65,10 @@ export function parseCodexToml(text: string): ParseResult {
     ].find((key) => value[key] !== undefined);
     if (unsupported) {
       result.diagnostics.push(`${field}.${unsupported} is not supported`);
+      continue;
+    }
+    if (value.env_http_headers !== undefined && !options.allowEnvHttpHeaders) {
+      result.diagnostics.push(`${field}.env_http_headers is not supported`);
       continue;
     }
     if (value.url !== undefined) {
@@ -77,14 +88,66 @@ export function parseCodexToml(text: string): ParseResult {
         );
         continue;
       }
+      if (
+        value.env_http_headers !== undefined &&
+        !stringRecord(value.env_http_headers)
+      ) {
+        result.diagnostics.push(
+          `${field}.env_http_headers must contain only string values`,
+        );
+        continue;
+      }
+      const headers = { ...(value.http_headers ?? {}) };
+      if (value.env_http_headers !== undefined) {
+        const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
+        for (const [name, variable] of Object.entries(value.env_http_headers)) {
+          let resolved: string | undefined;
+          try {
+            resolved = getEnv(variable);
+          } catch {
+            result.diagnostics.push(
+              `${field}.env_http_headers has an invalid entry`,
+            );
+            continue;
+          }
+          if (resolved === undefined || !resolved.trim()) continue;
+          try {
+            new Headers().set(name, resolved);
+          } catch {
+            // Never include the environment variable name or its value in logs.
+            result.diagnostics.push(
+              `${field}.env_http_headers has an invalid entry`,
+            );
+            continue;
+          }
+          for (const existing of Object.keys(headers)) {
+            if (existing.toLowerCase() === name.toLowerCase()) {
+              delete headers[existing];
+            }
+          }
+          Object.defineProperty(headers, name, {
+            value: resolved,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
+        }
+      }
       const config: Mcp.ServerConfig = {
         type: "remote",
         url: value.url,
-        ...(value.http_headers === undefined
+        ...(value.http_headers === undefined &&
+            value.env_http_headers === undefined
           ? {}
-          : { headers: { ...value.http_headers } }),
+          : { headers }),
       };
       result.servers.push({ name, config });
+      continue;
+    }
+    if (value.env_http_headers !== undefined) {
+      result.diagnostics.push(
+        `${field}.env_http_headers requires a remote server`,
+      );
       continue;
     }
     if (typeof value.command !== "string" || !value.command.trim()) {
