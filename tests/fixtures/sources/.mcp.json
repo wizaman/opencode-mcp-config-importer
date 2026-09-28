@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "shared": { "command": "json-server" },
+    "json-only": { "command": "json-only-server" }
+  }
+}

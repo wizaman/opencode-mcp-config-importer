@@ -1,0 +1,9 @@
+[mcp_servers.shared]
+command = "codex-server"
+
+[mcp_servers.codex-only]
+command = "codex-only-server"
+
+[mcp_servers.codex-remote]
+url = "http://localhost:3001/mcp"
+http_headers = { "X-Test-Source" = "codex" }
