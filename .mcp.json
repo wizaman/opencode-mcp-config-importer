@@ -2,7 +2,11 @@
   "mcpServers": {
     "everything-stdio": {
       "command": "deno",
-      "args": ["x", "-A", "-y", "npm:@modelcontextprotocol/server-everything"]
+      "args": ["x", "-A", "-y", "${EVERYTHING_PACKAGE}"],
+      "env": {
+        "EVERYTHING_PACKAGE": "${EVERYTHING_PACKAGE_SOURCE}",
+        "EVERYTHING_PACKAGE_SOURCE": "npm:@modelcontextprotocol/server-everything"
+      }
     },
     "everything-remote": {
       "type": "http",

@@ -46,7 +46,7 @@ flowchart LR
 
 ## 変換と優先順位
 
-入力は `.mcp.json` の `mcpServers` にある名前付き定義とする。stdio の `command` / `args` / `env` / `cwd` を OpenCode V2 の `type: "local"`、コマンド配列、`environment` などに変換する。`type: "http"` の remote は絶対 HTTP(S) URL と文字列の headers を受け取り、OpenCode の `type: "remote"` に変換する。SSE などの別 transport は扱わない。未対応のハーネス固有フィールドから OAuth などを推測しない。
+入力は `.mcp.json` の `mcpServers` にある名前付き定義とする。stdio の `command` / `args` / `env` / `cwd` を OpenCode V2 の `type: "local"`、コマンド配列、`environment` などに変換する。`type: "http"` とエイリアス `"streamable-http"` の remote は絶対 HTTP(S) URL と文字列の headers を受け取り、OpenCode の `type: "remote"` に変換する。サーバー別 `timeout` は正の整数なら 1000 ミリ秒を下限として OpenCode の `timeout.execution` に渡し、未指定なら OpenCode の既定値に任せる。Claude Code のツール呼び出し用タイムアウトとの違いに加え、Copilot CLI のツール発見用タイムアウトは `catalog` へ反映していない。形式ごとの差異と環境変数の展開・継承は [PRD](./prd.md#タイムアウト) に整理する。旧式 HTTP+SSE と標準外の WebSocket は扱わない。未対応のハーネス固有フィールドから OAuth などを推測しない。
 
 `ctx.mcp.transform` のコールバックでは、各サーバーについて `editor.get(name)` で既存定義を確認する。既に同名の定義があれば `editor.set` せず、OpenCode ネイティブ設定を優先する。存在しない定義のみ追加する。プラグインが別のサーバーを削除・更新することはない。transform は再適用され得るため、外部の状態を書き換えず、同じ入力に対して同じ登録結果を返す。
 
@@ -72,3 +72,5 @@ flowchart LR
 Codex の TOML 解析には `smol-toml` を使用する。`src/codex_toml.ts` はサーバー単位で検証し、stdio の `command` / `args` / `env` / `cwd` を local 定義へ、remote の `url` / `http_headers` を remote 定義へ変換する。両方の入力元を `src/index.ts` で順に読み込み、同じ MCP transform で登録する。独立した内部表現は設けない。未対応の認証設定を持つサーバーは取り込まない。
 
 `env_http_headers` と `bearer_token_env_var` は明示オプション `allowCodexEnvHttpHeaders: true` でのみ取り込む。無効時は該当サーバーを定義ごとスキップし、先勝ちの優先順位では次の有効な定義が採用可能となる。有効時はプラグインが OpenCode プロセスの環境変数を起動時に読む。`env_http_headers` は空白だけの値を追加せず、値があれば大文字・小文字を区別せず静的ヘッダーに優先させる。Bearer は値から `Authorization: Bearer <値>` を生成し、同名の静的・環境変数由来のヘッダーより優先する。Bearer の値が未設定・空白・不正ならサーバーを登録しない。プラグインの MCP transform に渡した `{env:NAME}` は OpenCode V2.0.18 では展開されないため、値を直接登録する。この値が `/api/config` や `/api/mcp` に現れないことはダミー値で検証するが、秘密値隔離の保証とはみなさない。
+
+`.mcp.json` の stdio では `args`・`env` の値の `${VAR}` と `${VAR:-default}` を登録前に展開し、`command`・`cwd` はそのまま渡す。環境変数の参照元は OpenCode プロセスと同じサーバーの `env` で、後者を優先する。解決不能・循環参照ではサーバーを登録せず、診断に値を含めない。子プロセスへ継承する環境変数そのものは OpenCode に委ねる。詳しい方針は [PRD](./prd.md#環境変数とプレースホルダー) を参照する。

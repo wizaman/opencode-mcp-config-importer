@@ -60,6 +60,79 @@ Deno.test("converts commands without optional fields and preserves platform path
   assert.deepEqual(parsed.diagnostics, []);
 });
 
+Deno.test("expands stdio args and env but not command or cwd", () => {
+  const parsed = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        local: {
+          command: "${SERVER_COMMAND}",
+          args: [
+            "${TOKEN}",
+            "${HOST_ONLY}",
+            "${MISSING:-}",
+            "${TOKEN:-fallback}",
+            "${EMPTY:-default}",
+          ],
+          env: { TOKEN: "local-token", CHAIN: "${TOKEN}/path", EMPTY: "" },
+          cwd: "${CHAIN}",
+        },
+      },
+    }),
+    {
+      getEnv: (name) =>
+        new Map([
+          ["TOKEN", "host-token"],
+          ["HOST_ONLY", "host-value"],
+        ]).get(name),
+    },
+  );
+  assert.deepEqual(parsed, {
+    servers: [{
+      name: "local",
+      config: {
+        type: "local",
+        command: [
+          "${SERVER_COMMAND}",
+          "local-token",
+          "host-value",
+          "",
+          "local-token",
+          "default",
+        ],
+        environment: {
+          TOKEN: "local-token",
+          CHAIN: "local-token/path",
+          EMPTY: "",
+        },
+        cwd: "${CHAIN}",
+      },
+    }],
+    diagnostics: [],
+  });
+});
+
+Deno.test("rejects unresolved or cyclic stdio references without exposing values", () => {
+  const parsed = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        missing: { command: "server", args: ["${UNSET}"] },
+        missingEnv: { command: "server", env: { TOKEN: "${UNSET}" } },
+        badSyntax: { command: "server", args: ["${UNSET?}"] },
+        cycle: { command: "server", env: { A: "${B}", B: "${A}" } },
+        selfFallback: { command: "server", env: { A: "${A:-fallback}" } },
+        valid: { command: "server", args: ["$UNSET", "${UNSET:-}"] },
+      },
+    }),
+    { getEnv: () => undefined },
+  );
+  assert.deepEqual(parsed.servers, [{
+    name: "valid",
+    config: { type: "local", command: ["server", "$UNSET", ""] },
+  }]);
+  assert.equal(parsed.diagnostics.length, 5);
+  assert.equal(parsed.diagnostics.join(" ").includes("UNSET"), false);
+});
+
 Deno.test("rejects malformed JSON without revealing contents", () => {
   const parsed = parseMcpJson('{"mcpServers":{"key":"secret"');
   assert.deepEqual(parsed.servers, []);
@@ -87,6 +160,95 @@ Deno.test("converts a Streamable HTTP server and headers", () => {
     }],
     diagnostics: [],
   });
+});
+
+Deno.test("accepts the Streamable HTTP alias and maps timeouts for local and remote servers", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      local: { command: "server", timeout: 2500 },
+      remote: {
+        type: "streamable-http",
+        url: "https://example.com/mcp",
+        timeout: 6000,
+      },
+      tooShort: { command: "server", timeout: 999 },
+      shortRemote: {
+        type: "http",
+        url: "https://example.com/short",
+        timeout: 1,
+      },
+      unspecified: { command: "server" },
+    },
+  }));
+  assert.deepEqual(parsed, {
+    servers: [
+      {
+        name: "local",
+        config: {
+          type: "local",
+          command: ["server"],
+          timeout: { execution: 2500 },
+        },
+      },
+      {
+        name: "remote",
+        config: {
+          type: "remote",
+          url: "https://example.com/mcp",
+          timeout: { execution: 6000 },
+        },
+      },
+      {
+        name: "tooShort",
+        config: {
+          type: "local",
+          command: ["server"],
+          timeout: { execution: 1000 },
+        },
+      },
+      {
+        name: "shortRemote",
+        config: {
+          type: "remote",
+          url: "https://example.com/short",
+          timeout: { execution: 1000 },
+        },
+      },
+      { name: "unspecified", config: { type: "local", command: ["server"] } },
+    ],
+    diagnostics: [],
+  });
+});
+
+Deno.test("skips WebSocket and malformed timeouts without dropping valid servers", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      websocket: { type: "ws", url: "wss://example.com/mcp" },
+      wrongType: { command: "server", timeout: "secret" },
+      fraction: {
+        type: "http",
+        url: "https://example.com/mcp",
+        timeout: 1500.5,
+      },
+      unsafe: { command: "server", timeout: Number.MAX_SAFE_INTEGER + 1 },
+      zero: { command: "server", timeout: 0 },
+      negative: { command: "server", timeout: -1 },
+      valid: { type: "http", url: "https://example.com/mcp", timeout: 1000 },
+    },
+  }));
+  assert.deepEqual(parsed.servers, [{
+    name: "valid",
+    config: {
+      type: "remote",
+      url: "https://example.com/mcp",
+      timeout: { execution: 1000 },
+    },
+  }]);
+  assert.equal(parsed.diagnostics.length, 6);
+  assert(
+    parsed.diagnostics.some((message) => message.includes("unsupported type")),
+  );
+  assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
 });
 
 Deno.test("skips invalid remote definitions without logging header values", () => {
