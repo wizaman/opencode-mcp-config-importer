@@ -40,7 +40,28 @@ export function parseMcpJson(text: string): ParseResult {
       result.diagnostics.push(`mcpServers.${name} must be an object`);
       continue;
     }
-    if (value.type === "http") {
+    if (
+      value.type !== undefined && value.type !== "stdio" &&
+      value.type !== "http" && value.type !== "streamable-http"
+    ) {
+      result.diagnostics.push(`mcpServers.${name}: unsupported type`);
+      continue;
+    }
+    if (
+      value.timeout !== undefined &&
+      (typeof value.timeout !== "number" ||
+        !Number.isSafeInteger(value.timeout))
+    ) {
+      result.diagnostics.push(
+        `mcpServers.${name}.timeout must be an integer in milliseconds`,
+      );
+      continue;
+    }
+    // Claude Code ignores per-server tool timeouts below one second.
+    const timeout = value.timeout !== undefined && value.timeout >= 1000
+      ? { timeout: { execution: value.timeout } }
+      : {};
+    if (value.type === "http" || value.type === "streamable-http") {
       if (typeof value.url !== "string" || !isHttpUrl(value.url)) {
         result.diagnostics.push(
           `mcpServers.${name}.url must be an absolute HTTP(S) URL`,
@@ -59,12 +80,9 @@ export function parseMcpJson(text: string): ParseResult {
           type: "remote",
           url: value.url,
           ...(value.headers === undefined ? {} : { headers: value.headers }),
+          ...timeout,
         },
       });
-      continue;
-    }
-    if (value.type !== undefined && value.type !== "stdio") {
-      result.diagnostics.push(`mcpServers.${name}: unsupported type`);
       continue;
     }
     if (value.url !== undefined) {
@@ -112,6 +130,7 @@ export function parseMcpJson(text: string): ParseResult {
         command: [value.command, ...(value.args ?? [])],
         ...(value.env === undefined ? {} : { environment: value.env }),
         ...(value.cwd === undefined ? {} : { cwd: value.cwd }),
+        ...timeout,
       },
     });
   }

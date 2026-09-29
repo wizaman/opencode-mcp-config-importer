@@ -1,7 +1,9 @@
 # opencode-mcp-json-adapter
 プロジェクトルートの `.mcp.json` を OpenCode V2 の MCP 設定に取り込むプラグインです。明示的に有効化した場合は `.codex/config.toml` の `[mcp_servers]` も取り込みます。
 
-対応する transport は stdio と Streamable HTTP です。旧式の HTTP+SSE transport（`.mcp.json` の `type: "sse"` など）は意図的に取り込みません。MCP 2026-07-28 仕様で旧式の HTTP+SSE transport が非推奨となったためです。Streamable HTTP 内で使われる SSE レスポンスとは別の話です。[^mcp-2026-07-28]
+対応する transport は stdio と Streamable HTTP です。`.mcp.json` の `type: "http"` と `type: "streamable-http"` は同じ Streamable HTTP として取り込みます。旧式の HTTP+SSE transport（`type: "sse"` など）は、MCP 2026-07-28 仕様で非推奨となったため意図的に取り込みません。Streamable HTTP 内で使われる SSE レスポンスとは別の話です。`type: "ws"` は MCP の標準 transport ではないため取り込みません。[^mcp-2026-07-28]
+
+`.mcp.json` のサーバー別 `timeout` は、1000 以上の整数（ミリ秒）のとき OpenCode の `timeout.execution` に渡します。1000 未満は無視し、不正な型や小数の場合はサーバー定義をスキップします。Claude Code ではツール呼び出し向けの指定ですが、OpenCode の `execution` は prompt・resource の取得にも適用されるため、適用範囲は完全には一致しません。
 
 [^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 

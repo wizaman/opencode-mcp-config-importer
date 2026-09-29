@@ -82,7 +82,8 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | フィールド | 入力形式・対応方針 |
 | --- | --- |
 | `mcpServers` | 必須のオブジェクト。キーをサーバー名、値を定義オブジェクトとして扱う。欠落・型違いはファイル全体を解析せず診断する。空オブジェクトは可。 |
-| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` は Streamable HTTP。`"sse"` は後述のとおり非対応。それ以外の値もサーバーごとスキップする。 |
+| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` または `"streamable-http"` は Streamable HTTP。`"sse"` と `"ws"` は後述のとおり非対応。それ以外の値もサーバーごとスキップする。 |
+| `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通のツール呼び出しタイムアウト（ミリ秒）。安全な整数を受け付け、1000 以上なら OpenCode のサーバー単位の `timeout.execution` に渡す。1000 未満は元のクライアントと同様に無視する。型違いや整数以外はサーバーをスキップして診断する。OpenCode ではツール以外に prompt・resource の取得にも適用されるため、完全に同じ意味ではない。 |
 | 上記・下記以外のフィールド | 現状は検証せず無視する。OAuth や権限制約など、別のクライアント固有の項目をここから推測・変換しない。制約の黙殺は安全上の要検討事項。 |
 
 #### stdio（`type` 省略または `"stdio"`）
@@ -96,7 +97,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 
 `url` が付いている場合は、`command` の有無にかかわらずサーバーをスキップする。HTTP 用の `headers` が付いていても現状は無視する。
 
-#### Streamable HTTP（`type: "http"`）
+#### Streamable HTTP（`type: "http"` または `"streamable-http"`）
 
 | フィールド | 入力形式・対応方針 |
 | --- | --- |
@@ -118,6 +119,10 @@ stdio 用の `command` / `args` / `env` / `cwd` を併記しても現状は無�
 ```
 
 SSE 用のフィールドは変換・検証しない。旧式の HTTP+SSE transport は MCP 2026-07-28 仕様で非推奨となったため、意図的に対象外とする。これは Streamable HTTP のレスポンスで使われる SSE を除外するという意味ではない。[^mcp-2026-07-28]
+
+#### WebSocket（`type: "ws"`）
+
+WebSocket は MCP の標準 transport として定義されていないため、サーバーごとスキップして診断する。WebSocket 用の `wss://` URL やその他のフィールドは変換・検証しない。
 
 ### `.codex/config.toml`（明示 opt-in の入力元）
 

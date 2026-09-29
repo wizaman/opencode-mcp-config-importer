@@ -89,6 +89,71 @@ Deno.test("converts a Streamable HTTP server and headers", () => {
   });
 });
 
+Deno.test("accepts the Streamable HTTP alias and maps timeouts for local and remote servers", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      local: { command: "server", timeout: 2500 },
+      remote: {
+        type: "streamable-http",
+        url: "https://example.com/mcp",
+        timeout: 6000,
+      },
+      tooShort: { command: "server", timeout: 999 },
+    },
+  }));
+  assert.deepEqual(parsed, {
+    servers: [
+      {
+        name: "local",
+        config: {
+          type: "local",
+          command: ["server"],
+          timeout: { execution: 2500 },
+        },
+      },
+      {
+        name: "remote",
+        config: {
+          type: "remote",
+          url: "https://example.com/mcp",
+          timeout: { execution: 6000 },
+        },
+      },
+      { name: "tooShort", config: { type: "local", command: ["server"] } },
+    ],
+    diagnostics: [],
+  });
+});
+
+Deno.test("skips WebSocket and malformed timeouts without dropping valid servers", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      websocket: { type: "ws", url: "wss://example.com/mcp" },
+      wrongType: { command: "server", timeout: "secret" },
+      fraction: {
+        type: "http",
+        url: "https://example.com/mcp",
+        timeout: 1500.5,
+      },
+      unsafe: { command: "server", timeout: Number.MAX_SAFE_INTEGER + 1 },
+      valid: { type: "http", url: "https://example.com/mcp", timeout: 1000 },
+    },
+  }));
+  assert.deepEqual(parsed.servers, [{
+    name: "valid",
+    config: {
+      type: "remote",
+      url: "https://example.com/mcp",
+      timeout: { execution: 1000 },
+    },
+  }]);
+  assert.equal(parsed.diagnostics.length, 4);
+  assert(
+    parsed.diagnostics.some((message) => message.includes("unsupported type")),
+  );
+  assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
+});
+
 Deno.test("skips invalid remote definitions without logging header values", () => {
   const parsed = parseMcpJson(JSON.stringify({
     mcpServers: {
