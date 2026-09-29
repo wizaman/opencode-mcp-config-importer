@@ -147,10 +147,10 @@ Copilot CLI に寄せて `catalog` にも適用する案は、ツール発見の
 | 形式・クライアント | 展開対象と子プロセス環境 |
 | --- | --- |
 | Claude Code の `.mcp.json` | `${VAR}` / `${VAR:-default}` を `command`、`args`、`env`、remote の `url`・`headers` で展開する。remote の URL・ヘッダーでは特定の認証用環境変数を空として扱う制限がある。未設定で既定値のない変数は警告し、原則として未展開の文字列を残す。 |
-| Copilot CLI の `.mcp.json` | 公式リファレンスが明示する `$VAR` / `${VAR}` / `${VAR:-default}` の展開対象は `env` の値と remote の `headers`。`command`・`args`・`cwd`・`url` で同じ展開を保証するとは記載されていない。CLI の追加手順では `PATH` を自動継承し、その他の環境変数は `env` で指定するよう案内する。 |
+| Copilot CLI の `.mcp.json` | 公式リファレンスが明示する `$VAR` / `${VAR}` / `${VAR:-default}` の展開対象は `env` の値と remote の `headers`。CLI の追加手順は `PATH` の自動継承と、その他の必要な変数の `env` での指定を案内する。一方、[changelog][copilot-cli-changelog] には `command`・`args`・`cwd` で参照した環境変数がサーバー環境へ自動追加される旨の記載がある。単純な「`env` に宣言された変数しか参照できない」という仕様として扱わない。 |
 | 現状の本プラグイン | `.mcp.json` の値を展開せずに OpenCode に渡す。stdio の `env` は `environment` として追加され、OpenCode は元のプロセス環境も継承する。したがって `env` だけで親環境の秘密値を子プロセスから隔離する仕組みではない。OpenCode の `{env:NAME}` という置換構文を、各クライアントの `${VAR}` と同一視しない。 |
 
-今後 `.mcp.json` の展開を追加する場合は、フィールド・未設定時の扱い・秘密値の送信先と継承範囲を個別に決める。現状の未展開文字列の受け渡しが安全だという保証にはしない。
+**今後の方針（未実装）:** stdio サーバーに渡す環境変数の継承は OpenCode の仕様に委ね、`env` の指定がない場合でも継承環境を `PATH` のみに制限しない。設定値の変数展開はこれとは独立に設計する。展開時の参照元を OpenCode プロセスの環境と `.mcp.json` の同じサーバーの `env` に限定する方針とし、`args` 等で参照する変数を `env` にも宣言することは必須にしない。Copilot CLI の自動追加の挙動や、Agent Plugins v1 の専用プレースホルダー規則はそのまま再現しない。対応するフィールド、同名変数の優先順位、未設定時の扱い、展開した秘密値の引数・URL・ヘッダーへの露出は実装前に決める。現状の未展開文字列の受け渡しが安全だという保証にはしない。
 
 #### 参考仕様：Agent Plugins v1 の `mcp.json`（入力対象外）
 
@@ -229,6 +229,7 @@ Bearer と任意の環境変数由来ヘッダーは同じ opt-in にまとめ�
 [codex-mcp]: https://developers.openai.com/codex/mcp
 [claude-mcp]: https://code.claude.com/docs/en/mcp
 [copilot-cli-mcp]: https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference#mcp-server-configuration
+[copilot-cli-changelog]: https://redirect.github.com/github/copilot-cli/blob/main/changelog.md
 [agent-plugins-v1]: https://agent-plugins.org/specification#7-2-mcp-servers
 [opencode-v2-mcp]: https://opencode.ai/v2/docs/mcp-servers#timeouts
 
