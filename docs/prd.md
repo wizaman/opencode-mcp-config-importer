@@ -57,7 +57,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 
 ### `.mcp.json`（既定の入力元）
 
-プロジェクトルートの `.mcp.json` にある `mcpServers` オブジェクトを読む。これは MCP プロトコルが定める共通の設定ファイルではなく、本プラグインが採用するクライアント側の設定形式の一部である。Agent Plugins v1 が定義するプラグイン内の `mcp.json` とは別ファイル・別形式であり、後者は読み込まない。例:
+プロジェクトルートの `.mcp.json` にある `mcpServers` オブジェクトを読む。これは MCP プロトコルが定める共通の設定ファイルではなく、本プラグインが採用するクライアント側の設定形式の一部である。取り込むサーバーの基本形式は、原則として Claude Code と Copilot CLI の両方が受け付けるものに限定する。追加のクライアント固有フィールドを無視することと、サーバー形式の選択に使う `type` の独自値を新たに受け付けることは区別する。Agent Plugins v1 が定義するプラグイン内の `mcp.json` とは別ファイル・別形式であり、後者は読み込まない。例:
 
 ```json
 {
@@ -82,7 +82,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | フィールド | 入力形式・対応方針 |
 | --- | --- |
 | `mcpServers` | 必須のオブジェクト。キーをサーバー名、値を定義オブジェクトとして扱う。欠落・型違いはファイル全体を解析せず診断する。空オブジェクトは可。 |
-| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` または `"streamable-http"` は Streamable HTTP。`"sse"` と `"ws"` は後述のとおり非対応。それ以外の値もサーバーごとスキップする。 |
+| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` または `"streamable-http"` は Streamable HTTP。`"sse"` と `"ws"` は後述のとおり非対応。Copilot CLI 専用の `"local"` も受け付けず、それ以外の値と同じくサーバーごとスキップする。 |
 | `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通。正の安全な整数（ミリ秒）を受け付け、現状は 1000 未満を 1000 に引き上げて OpenCode の `timeout.execution` に渡す。未指定なら OpenCode の既定値またはグローバル設定を使う。0・負数・型違い・整数以外はサーバーをスキップして診断する。クライアント間の意味の違いは「タイムアウト」で説明する。 |
 | 上記・下記以外のフィールド | 現状は検証せず無視する。別のクライアント固有の項目を推測・変換しない。無視した制約・認証の挙動までは再現できない。Copilot CLI 固有の既知項目は後述する。 |
 
@@ -158,7 +158,7 @@ Copilot CLI に寄せて `catalog` にも適用する案は、ツール発見の
 
 | フィールド・指定 | Copilot CLI の意味 | 現行実装と今後の扱い |
 | --- | --- | --- |
-| stdio の `type: "local"` | `"stdio"` の別名。 | 現状は非対応の `type` としてサーバーごとスキップ。共通形式のために別名を増やす必要性は未確認。 |
+| stdio の `type: "local"` | `"stdio"` の別名。 | Claude Code と Copilot CLI の共通の `type` ではないため、意図的に受け付けず、サーバーごとスキップする。stdio を指定するなら `"stdio"` を使用する。 |
 | `tools` | サーバーから使えるツールの絞り込み。 | 現状は無視してサーバーを登録する。OpenCode のサーバー定義にそのまま渡せるフィールドではなく、Copilot CLI 側のツール制限は再現されない。 |
 | `deferTools` / `disableToolCache` / `slowConnectionThresholdMs` | ツールの表示・キャッシュ・接続遅延の警告を制御する。 | 現状は無視してサーバーを登録する。 |
 | remote の `oauthClientId` / `oauthScopes` / `oauthPublicClient` / `oauthGrantType` | Copilot CLI 固有の OAuth クライアント設定。 | 現状は無視して remote サーバーを登録する。Copilot CLI の OAuth 設定は再現せず、必要な認証は OpenCode 側の動作に委ねる。 |
