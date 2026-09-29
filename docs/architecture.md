@@ -32,7 +32,7 @@ flowchart LR
 | 境界 | 責務 |
 | --- | --- |
 | `src/index.ts` | Plugin ID `opencode-mcp-json-adapter` を公開し、読み込み結果を MCP transform に登録する。 |
-| `src/mcp_json.ts` | JSON解析、`mcpServers` 以下のサーバー単位の検証、stdio / HTTP 定義の変換を行う。OpenCode を起動せず単体テストできる。 |
+| `src/mcp_json.ts` | JSON解析、Valibot による `mcpServers` 以下のサーバー単位の型検証、stdio / HTTP 定義の変換を行う。展開や opt-in の判定は型検証後に行い、OpenCode を起動せず単体テストできる。 |
 | `src/codex_toml.ts` | TOML解析、`mcp_servers` 以下のサーバー単位の検証、stdio / HTTP 定義の変換を行う。 |
 | OpenCode | MCP registry の構築、接続のライフサイクル、実際のサーバー起動・通信を担う。 |
 

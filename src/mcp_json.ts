@@ -1,4 +1,5 @@
 import type { Mcp } from "@opencode/plugin";
+import * as v from "valibot";
 
 export interface ParsedServer {
   name: string;
@@ -14,9 +15,63 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function stringRecord(value: unknown): value is Record<string, string> {
-  return isObject(value) &&
-    Object.values(value).every((item) => typeof item === "string");
+// Valibot's record accepts arrays; .mcp.json maps must be JSON objects.
+const ObjectRecordSchema = v.custom<Record<string, unknown>>(isObject);
+const StringRecordSchema = v.intersect([
+  ObjectRecordSchema,
+  v.record(v.string(), v.string()),
+]);
+const RootSchema = v.object({
+  mcpServers: v.intersect([
+    ObjectRecordSchema,
+    v.record(v.string(), v.unknown()),
+  ]),
+});
+const CommonEntries = {
+  timeout: v.optional(v.pipe(
+    v.number(),
+    v.check((value) => Number.isSafeInteger(value) && value > 0),
+  )),
+};
+const NonBlankString = v.pipe(v.string(), v.check((value) => !!value.trim()));
+const StdioSchema = v.object({
+  ...CommonEntries,
+  type: v.optional(v.literal("stdio")),
+  command: NonBlankString,
+  args: v.optional(v.array(v.string())),
+  env: v.optional(StringRecordSchema),
+  cwd: v.optional(NonBlankString),
+});
+const HttpSchema = v.object({
+  ...CommonEntries,
+  type: v.picklist(["http", "streamable-http"]),
+  url: v.string(),
+  headers: v.optional(StringRecordSchema),
+});
+
+function invalidField(
+  name: string,
+  issues: readonly v.BaseIssue<unknown>[],
+): string {
+  const key = issues[0]?.path?.[0]?.key;
+  switch (key) {
+    case "timeout":
+      return `mcpServers.${name}.timeout must be a positive integer in milliseconds`;
+    case "url":
+      return `mcpServers.${name}.url must be an absolute HTTP(S) URL`;
+    case "headers":
+      return `mcpServers.${name}.headers must contain only string values`;
+    case "command":
+      return `mcpServers.${name}.command must be a non-empty string`;
+    case "args":
+      return `mcpServers.${name}.args must be an array of strings`;
+    case "env":
+      return `mcpServers.${name}.env must contain only string values`;
+    case "cwd":
+      return `mcpServers.${name}.cwd must be a non-empty string`;
+    default:
+      return `mcpServers.${name}: invalid server definition`;
+  }
 }
 
 function expandValue(
@@ -117,12 +172,13 @@ export function parseMcpJson(
     return result;
   }
 
-  if (!isObject(input) || !isObject(input.mcpServers)) {
+  const root = v.safeParse(RootSchema, input);
+  if (!root.success) {
     result.diagnostics.push("mcpServers must be an object");
     return result;
   }
 
-  for (const [name, value] of Object.entries(input.mcpServers)) {
+  for (const [name, value] of Object.entries(root.output.mcpServers)) {
     if (!isObject(value)) {
       result.diagnostics.push(`mcpServers.${name} must be an object`);
       continue;
@@ -134,36 +190,19 @@ export function parseMcpJson(
       result.diagnostics.push(`mcpServers.${name}: unsupported type`);
       continue;
     }
-    if (
-      value.timeout !== undefined &&
-      (typeof value.timeout !== "number" ||
-        !Number.isSafeInteger(value.timeout) || value.timeout <= 0)
-    ) {
-      result.diagnostics.push(
-        `mcpServers.${name}.timeout must be a positive integer in milliseconds`,
-      );
-      continue;
-    }
-    const timeout = value.timeout === undefined
-      ? {}
-      : { timeout: { execution: Math.max(value.timeout, 1000) } };
     if (value.type === "http" || value.type === "streamable-http") {
-      if (typeof value.url !== "string") {
-        result.diagnostics.push(
-          `mcpServers.${name}.url must be an absolute HTTP(S) URL`,
-        );
+      const parsed = v.safeParse(HttpSchema, value);
+      if (!parsed.success) {
+        result.diagnostics.push(invalidField(name, parsed.issues));
         continue;
       }
-      if (value.headers !== undefined && !stringRecord(value.headers)) {
-        result.diagnostics.push(
-          `mcpServers.${name}.headers must contain only string values`,
-        );
-        continue;
-      }
-      const headers = value.headers as Record<string, string> | undefined;
+      const { url: rawUrl, headers, timeout: milliseconds } = parsed.output;
+      const timeout = milliseconds === undefined
+        ? {}
+        : { timeout: { execution: Math.max(milliseconds, 1000) } };
       if (
         options.allowRemoteEnvExpansion !== true &&
-        (value.url.includes("${") ||
+        (rawUrl.includes("${") ||
           Object.values(headers ?? {}).some((header) => header.includes("${")))
       ) {
         result.diagnostics.push(
@@ -173,8 +212,8 @@ export function parseMcpJson(
       }
       const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
       const url = options.allowRemoteEnvExpansion === true
-        ? expandValue(value.url, getEnv)
-        : value.url;
+        ? expandValue(rawUrl, getEnv)
+        : rawUrl;
       if (url === undefined) {
         result.diagnostics.push(
           `mcpServers.${name}: invalid or unresolved remote environment reference`,
@@ -235,42 +274,20 @@ export function parseMcpJson(
       );
       continue;
     }
-    if (typeof value.command !== "string" || !value.command.trim()) {
-      result.diagnostics.push(
-        `mcpServers.${name}.command must be a non-empty string`,
-      );
+    const parsed = v.safeParse(StdioSchema, value);
+    if (!parsed.success) {
+      result.diagnostics.push(invalidField(name, parsed.issues));
       continue;
     }
-    if (
-      value.args !== undefined &&
-      (!Array.isArray(value.args) ||
-        !value.args.every((arg: unknown) => typeof arg === "string"))
-    ) {
-      result.diagnostics.push(
-        `mcpServers.${name}.args must be an array of strings`,
-      );
-      continue;
-    }
-    if (value.env !== undefined && !stringRecord(value.env)) {
-      result.diagnostics.push(
-        `mcpServers.${name}.env must contain only string values`,
-      );
-      continue;
-    }
-    if (
-      value.cwd !== undefined &&
-      (typeof value.cwd !== "string" || !value.cwd.trim())
-    ) {
-      result.diagnostics.push(
-        `mcpServers.${name}.cwd must be a non-empty string`,
-      );
-      continue;
-    }
+    const { command, args, env, cwd, timeout: milliseconds } = parsed.output;
+    const timeout = milliseconds === undefined
+      ? {}
+      : { timeout: { execution: Math.max(milliseconds, 1000) } };
 
     const expanded = expandStdio(
       {
-        args: value.args ?? [],
-        env: value.env ?? {},
+        args: args ?? [],
+        env: env ?? {},
       },
       options.getEnv ?? ((name) => process.env[name]),
     );
@@ -284,9 +301,9 @@ export function parseMcpJson(
       name,
       config: {
         type: "local",
-        command: [value.command, ...expanded.args],
-        ...(value.env === undefined ? {} : { environment: expanded.env }),
-        ...(value.cwd === undefined ? {} : { cwd: value.cwd }),
+        command: [command, ...expanded.args],
+        ...(env === undefined ? {} : { environment: expanded.env }),
+        ...(cwd === undefined ? {} : { cwd }),
         ...timeout,
       },
     });

@@ -480,3 +480,25 @@ Deno.test("rejects invalid root and argument shapes", () => {
     [],
   );
 });
+
+Deno.test("Valibot rejects arrays where .mcp.json requires maps", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      badEnv: { command: "server", env: ["secret"] },
+      badHeaders: {
+        type: "http",
+        url: "https://example.com/mcp",
+        headers: ["secret"],
+      },
+      valid: { type: "http", url: "https://example.com/mcp", extra: "ignored" },
+    },
+  }));
+  assert.deepEqual(parsed.servers, [{
+    name: "valid",
+    config: { type: "remote", url: "https://example.com/mcp" },
+  }]);
+  assert.deepEqual(parsed.diagnostics, [
+    "mcpServers.badEnv.env must contain only string values",
+    "mcpServers.badHeaders.headers must contain only string values",
+  ]);
+});
