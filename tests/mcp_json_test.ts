@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseMcpJson } from "../src/mcp_json.ts";
+import { parseMcpJson } from "../src/mcp_json/index.ts";
 
 Deno.test("parses an empty server list", () => {
   assert.deepEqual(parseMcpJson('{"mcpServers":{}}'), {

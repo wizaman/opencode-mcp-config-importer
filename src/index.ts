@@ -1,8 +1,9 @@
 import { Plugin } from "@opencode/plugin";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { parseCodexToml } from "./codex_toml.ts";
-import { parseMcpJson } from "./mcp_json.ts";
+import { parseCodexToml } from "./codex/index.ts";
+import { parseMcpJson } from "./mcp_json/index.ts";
+import type { ParsedServer } from "./parse_result.ts";
 
 type Source = "mcp-json" | "codex";
 const sourceFiles: Record<Source, string> = {
@@ -48,10 +49,7 @@ export default Plugin.define({
         "[opencode-mcp-json-adapter] options.allowMcpJsonRemoteEnvExpansion must be a boolean; remote environment expansion stays disabled",
       );
     }
-    const servers = new Map<
-      string,
-      ReturnType<typeof parseMcpJson>["servers"][number]["config"]
-    >();
+    const servers = new Map<string, ParsedServer["config"]>();
     for (const source of selected) {
       const path = join(ctx.location.project.directory, sourceFiles[source]);
       let text: string;

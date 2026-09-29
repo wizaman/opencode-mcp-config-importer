@@ -1,6 +1,6 @@
 import type { Mcp } from "@opencode/plugin";
 import { parse } from "smol-toml";
-import type { ParseResult } from "./mcp_json.ts";
+import type { ParseResult } from "../parse_result.ts";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

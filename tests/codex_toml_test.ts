@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseCodexToml } from "../src/codex_toml.ts";
+import { parseCodexToml } from "../src/codex/index.ts";
 
 Deno.test("converts Codex stdio and static HTTP headers, ignoring other settings", () => {
   const parsed = parseCodexToml(`

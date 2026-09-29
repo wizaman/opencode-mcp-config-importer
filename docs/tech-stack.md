@@ -116,25 +116,22 @@ release taskは最低限、
 
 Git tagやGitHub Releaseの生成をrelease taskに含めるかは、初期実装では必須としない。
 
-## 想定構成
+## 構成
 
 ```text
 package.json
+deno.json
 deno.lock
 src/
   index.ts
-  mcp_json.ts
-  adapter.ts
+  parse_result.ts
+  mcp_json/
+    index.ts
+    schema.ts
+  codex/
+    index.ts
 tests/
   ...
 README.md
 LICENSE
 ```
-
-Deno固有設定が必要になった場合のみ:
-
-```text
-deno.json
-```
-
-を追加する。
