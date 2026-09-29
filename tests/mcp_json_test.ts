@@ -99,6 +99,12 @@ Deno.test("accepts the Streamable HTTP alias and maps timeouts for local and rem
         timeout: 6000,
       },
       tooShort: { command: "server", timeout: 999 },
+      shortRemote: {
+        type: "http",
+        url: "https://example.com/short",
+        timeout: 1,
+      },
+      unspecified: { command: "server" },
     },
   }));
   assert.deepEqual(parsed, {
@@ -119,7 +125,23 @@ Deno.test("accepts the Streamable HTTP alias and maps timeouts for local and rem
           timeout: { execution: 6000 },
         },
       },
-      { name: "tooShort", config: { type: "local", command: ["server"] } },
+      {
+        name: "tooShort",
+        config: {
+          type: "local",
+          command: ["server"],
+          timeout: { execution: 1000 },
+        },
+      },
+      {
+        name: "shortRemote",
+        config: {
+          type: "remote",
+          url: "https://example.com/short",
+          timeout: { execution: 1000 },
+        },
+      },
+      { name: "unspecified", config: { type: "local", command: ["server"] } },
     ],
     diagnostics: [],
   });
@@ -136,6 +158,8 @@ Deno.test("skips WebSocket and malformed timeouts without dropping valid servers
         timeout: 1500.5,
       },
       unsafe: { command: "server", timeout: Number.MAX_SAFE_INTEGER + 1 },
+      zero: { command: "server", timeout: 0 },
+      negative: { command: "server", timeout: -1 },
       valid: { type: "http", url: "https://example.com/mcp", timeout: 1000 },
     },
   }));
@@ -147,7 +171,7 @@ Deno.test("skips WebSocket and malformed timeouts without dropping valid servers
       timeout: { execution: 1000 },
     },
   }]);
-  assert.equal(parsed.diagnostics.length, 4);
+  assert.equal(parsed.diagnostics.length, 6);
   assert(
     parsed.diagnostics.some((message) => message.includes("unsupported type")),
   );

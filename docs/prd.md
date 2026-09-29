@@ -83,7 +83,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | --- | --- |
 | `mcpServers` | 必須のオブジェクト。キーをサーバー名、値を定義オブジェクトとして扱う。欠落・型違いはファイル全体を解析せず診断する。空オブジェクトは可。 |
 | `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` または `"streamable-http"` は Streamable HTTP。`"sse"` と `"ws"` は後述のとおり非対応。それ以外の値もサーバーごとスキップする。 |
-| `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通のツール呼び出しタイムアウト（ミリ秒）。安全な整数を受け付け、1000 以上なら OpenCode のサーバー単位の `timeout.execution` に渡す。1000 未満は元のクライアントと同様に無視する。型違いや整数以外はサーバーをスキップして診断する。OpenCode ではツール以外に prompt・resource の取得にも適用されるため、完全に同じ意味ではない。 |
+| `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通のツール呼び出しタイムアウト（ミリ秒）。正の安全な整数を受け付け、1000 未満は 1000 に引き上げて OpenCode のサーバー単位の `timeout.execution` に渡す。未指定時は OpenCode の既定値またはグローバル設定を使う。0・負数・型違い・整数以外はサーバーをスキップして診断する。OpenCode ではツール以外に prompt・resource の取得にも適用されるため、完全に同じ意味ではない。 |
 | 上記・下記以外のフィールド | 現状は検証せず無視する。OAuth や権限制約など、別のクライアント固有の項目をここから推測・変換しない。制約の黙殺は安全上の要検討事項。 |
 
 #### stdio（`type` 省略または `"stdio"`）

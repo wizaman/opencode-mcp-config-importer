@@ -50,17 +50,16 @@ export function parseMcpJson(text: string): ParseResult {
     if (
       value.timeout !== undefined &&
       (typeof value.timeout !== "number" ||
-        !Number.isSafeInteger(value.timeout))
+        !Number.isSafeInteger(value.timeout) || value.timeout <= 0)
     ) {
       result.diagnostics.push(
-        `mcpServers.${name}.timeout must be an integer in milliseconds`,
+        `mcpServers.${name}.timeout must be a positive integer in milliseconds`,
       );
       continue;
     }
-    // Claude Code ignores per-server tool timeouts below one second.
-    const timeout = value.timeout !== undefined && value.timeout >= 1000
-      ? { timeout: { execution: value.timeout } }
-      : {};
+    const timeout = value.timeout === undefined
+      ? {}
+      : { timeout: { execution: Math.max(value.timeout, 1000) } };
     if (value.type === "http" || value.type === "streamable-http") {
       if (typeof value.url !== "string" || !isHttpUrl(value.url)) {
         result.diagnostics.push(

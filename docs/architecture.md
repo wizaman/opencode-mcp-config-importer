@@ -46,7 +46,7 @@ flowchart LR
 
 ## 変換と優先順位
 
-入力は `.mcp.json` の `mcpServers` にある名前付き定義とする。stdio の `command` / `args` / `env` / `cwd` を OpenCode V2 の `type: "local"`、コマンド配列、`environment` などに変換する。`type: "http"` とエイリアス `"streamable-http"` の remote は絶対 HTTP(S) URL と文字列の headers を受け取り、OpenCode の `type: "remote"` に変換する。サーバー別 `timeout` は 1000 ミリ秒以上の整数なら OpenCode の `timeout.execution` に渡す。OpenCode では prompt・resource にも適用されるため、元のツール呼び出しタイムアウトと完全に同じ意味ではない。旧式 HTTP+SSE と標準外の WebSocket は扱わない。未対応のハーネス固有フィールドから OAuth などを推測しない。
+入力は `.mcp.json` の `mcpServers` にある名前付き定義とする。stdio の `command` / `args` / `env` / `cwd` を OpenCode V2 の `type: "local"`、コマンド配列、`environment` などに変換する。`type: "http"` とエイリアス `"streamable-http"` の remote は絶対 HTTP(S) URL と文字列の headers を受け取り、OpenCode の `type: "remote"` に変換する。サーバー別 `timeout` は正の整数なら 1000 ミリ秒を下限として OpenCode の `timeout.execution` に渡し、未指定なら OpenCode の既定値に任せる。OpenCode では prompt・resource にも適用されるため、元のツール呼び出しタイムアウトと完全に同じ意味ではない。旧式 HTTP+SSE と標準外の WebSocket は扱わない。未対応のハーネス固有フィールドから OAuth などを推測しない。
 
 `ctx.mcp.transform` のコールバックでは、各サーバーについて `editor.get(name)` で既存定義を確認する。既に同名の定義があれば `editor.set` せず、OpenCode ネイティブ設定を優先する。存在しない定義のみ追加する。プラグインが別のサーバーを削除・更新することはない。transform は再適用され得るため、外部の状態を書き換えず、同じ入力に対して同じ登録結果を返す。
 
