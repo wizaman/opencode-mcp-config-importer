@@ -162,6 +162,146 @@ Deno.test("converts a Streamable HTTP server and headers", () => {
   });
 });
 
+Deno.test("remote references require opt-in without reading the environment", () => {
+  const parsed = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        static: {
+          type: "http",
+          url: "https://example.com/mcp",
+          headers: { "X-Static": "static" },
+        },
+        urlReference: {
+          type: "http",
+          url: "https://${HOST}/mcp",
+        },
+        headerReference: {
+          type: "streamable-http",
+          url: "https://example.com/mcp",
+          headers: { "X-Static": "static", Authorization: "Bearer ${TOKEN}" },
+        },
+        malformed: {
+          type: "http",
+          url: "https://example.com/mcp",
+          headers: { Authorization: "${TOKEN" },
+        },
+        ignoredStdioField: {
+          type: "http",
+          url: "https://example.com/mcp",
+          env: { TOKEN: "${TOKEN}" },
+        },
+      },
+    }),
+    {
+      getEnv: () => {
+        throw new Error("must not read environment");
+      },
+    },
+  );
+  assert.deepEqual(parsed.servers, [
+    {
+      name: "static",
+      config: {
+        type: "remote",
+        url: "https://example.com/mcp",
+        headers: { "X-Static": "static" },
+      },
+    },
+    {
+      name: "ignoredStdioField",
+      config: { type: "remote", url: "https://example.com/mcp" },
+    },
+  ]);
+  assert.equal(parsed.diagnostics.length, 3);
+  assert(
+    parsed.diagnostics.every((message) =>
+      message.includes("allowMcpJsonRemoteEnvExpansion")
+    ),
+  );
+  assert.equal(parsed.diagnostics.join(" ").includes("TOKEN"), false);
+});
+
+Deno.test("opted-in remote expansion uses the process environment and explicit defaults", () => {
+  const parsed = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        remote: {
+          type: "streamable-http",
+          url: "https://${HOST}/mcp/${MISSING:-default}",
+          headers: {
+            Authorization: "Bearer ${TOKEN}",
+            "X-Optional": "${EMPTY:-fallback}",
+            "X-Empty": "${MISSING:-}",
+          },
+          env: { TOKEN: "ignored-remote-env" },
+        },
+      },
+    }),
+    {
+      allowRemoteEnvExpansion: true,
+      getEnv: (name) =>
+        new Map([
+          ["HOST", "example.com"],
+          ["TOKEN", "dummy-token"],
+          ["EMPTY", ""],
+        ]).get(name),
+    },
+  );
+  assert.deepEqual(parsed, {
+    servers: [{
+      name: "remote",
+      config: {
+        type: "remote",
+        url: "https://example.com/mcp/default",
+        headers: {
+          Authorization: "Bearer dummy-token",
+          "X-Optional": "fallback",
+          "X-Empty": "",
+        },
+      },
+    }],
+    diagnostics: [],
+  });
+});
+
+Deno.test("opted-in remote expansion rejects unresolved, malformed and invalid values", () => {
+  const parsed = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        missingUrl: { type: "http", url: "https://${MISSING}/mcp" },
+        missingHeader: {
+          type: "http",
+          url: "https://example.com/mcp",
+          headers: { "X-Static": "static", Authorization: "${MISSING}" },
+        },
+        malformed: { type: "http", url: "https://example.com/${BAD?}" },
+        invalidUrl: { type: "http", url: "${URL}" },
+        invalidHeader: {
+          type: "http",
+          url: "https://example.com/mcp",
+          headers: { Authorization: "Bearer ${TOKEN}" },
+        },
+        valid: { type: "http", url: "https://example.com/mcp" },
+      },
+    }),
+    {
+      allowRemoteEnvExpansion: true,
+      getEnv: (name) =>
+        new Map([
+          ["URL", "file:///secret-url"],
+          ["TOKEN", "secret\nheader"],
+        ]).get(name),
+    },
+  );
+  assert.deepEqual(parsed.servers, [{
+    name: "valid",
+    config: { type: "remote", url: "https://example.com/mcp" },
+  }]);
+  assert.equal(parsed.diagnostics.length, 5);
+  assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
+  assert.equal(parsed.diagnostics.join(" ").includes("TOKEN"), false);
+});
+
 Deno.test("accepts the Streamable HTTP alias and maps timeouts for local and remote servers", () => {
   const parsed = parseMcpJson(JSON.stringify({
     mcpServers: {

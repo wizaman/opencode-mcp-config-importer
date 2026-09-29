@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "dynamic": {
+      "type": "streamable-http",
+      "url": "http://localhost:3001/${ADAPTER_ENV_HEADER_PROBE}",
+      "headers": {
+        "Authorization": "Bearer ${ADAPTER_ENV_HEADER_PROBE}",
+        "X-Static": "static"
+      }
+    },
+    "static": {
+      "type": "http",
+      "url": "http://localhost:3001/mcp"
+    }
+  }
+}

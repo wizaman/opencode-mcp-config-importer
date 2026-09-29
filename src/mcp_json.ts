@@ -19,6 +19,43 @@ function stringRecord(value: unknown): value is Record<string, string> {
     Object.values(value).every((item) => typeof item === "string");
 }
 
+function expandValue(
+  text: string,
+  resolve: (name: string) => string | undefined,
+  isCyclic: () => boolean = () => false,
+): string | undefined {
+  let output = "";
+  let end = 0;
+  for (const match of text.matchAll(/\$\{([^}]*)\}/g)) {
+    const start = match.index;
+    const prefix = text.slice(end, start);
+    if (prefix.includes("${")) return;
+    const [, expression] = match;
+    const separator = expression.indexOf(":-");
+    const name = separator < 0 ? expression : expression.slice(0, separator);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return;
+    const fallback = separator < 0
+      ? undefined
+      : expression.slice(separator + 2);
+    if (fallback?.includes("${")) return;
+    let value: string | undefined;
+    try {
+      value = resolve(name);
+    } catch {
+      return;
+    }
+    if (isCyclic() || (value === undefined && fallback === undefined)) return;
+    output += prefix +
+      ((value === undefined || value === "") && fallback !== undefined
+        ? fallback
+        : value);
+    end = start + match[0].length;
+  }
+  const suffix = text.slice(end);
+  if (suffix.includes("${")) return;
+  return output + suffix;
+}
+
 function expandStdio(
   config: { args: string[]; env: Record<string, string> },
   getEnv: (name: string) => string | undefined,
@@ -35,41 +72,13 @@ function expandStdio(
         return;
       }
       resolving.add(name);
-      const value = expand(config.env[name]);
+      const value = expandValue(config.env[name], resolve, () => cyclic);
       resolving.delete(name);
       if (value === undefined || cyclic) return;
       resolved.set(name, value);
       return value;
     }
     return getEnv(name);
-  }
-
-  function expand(text: string): string | undefined {
-    let output = "";
-    let end = 0;
-    for (const match of text.matchAll(/\$\{([^}]*)\}/g)) {
-      const start = match.index;
-      const prefix = text.slice(end, start);
-      if (prefix.includes("${")) return;
-      const [, expression] = match;
-      const separator = expression.indexOf(":-");
-      const name = separator < 0 ? expression : expression.slice(0, separator);
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return;
-      const fallback = separator < 0
-        ? undefined
-        : expression.slice(separator + 2);
-      if (fallback?.includes("${")) return;
-      const value = resolve(name);
-      if (cyclic || (value === undefined && fallback === undefined)) return;
-      output += prefix +
-        ((value === undefined || value === "") && fallback !== undefined
-          ? fallback
-          : value);
-      end = start + match[0].length;
-    }
-    const suffix = text.slice(end);
-    if (suffix.includes("${")) return;
-    return output + suffix;
   }
 
   const env: Record<string, string> = {};
@@ -84,7 +93,7 @@ function expandStdio(
   }
   const args: string[] = [];
   for (const arg of config.args) {
-    const value = expand(arg);
+    const value = expandValue(arg, resolve, () => cyclic);
     if (value === undefined) return;
     args.push(value);
   }
@@ -93,7 +102,10 @@ function expandStdio(
 
 export function parseMcpJson(
   text: string,
-  options: { getEnv?: (name: string) => string | undefined } = {},
+  options: {
+    getEnv?: (name: string) => string | undefined;
+    allowRemoteEnvExpansion?: boolean;
+  } = {},
 ): ParseResult {
   const result: ParseResult = { servers: [], diagnostics: [] };
   let input: unknown;
@@ -136,7 +148,7 @@ export function parseMcpJson(
       ? {}
       : { timeout: { execution: Math.max(value.timeout, 1000) } };
     if (value.type === "http" || value.type === "streamable-http") {
-      if (typeof value.url !== "string" || !isHttpUrl(value.url)) {
+      if (typeof value.url !== "string") {
         result.diagnostics.push(
           `mcpServers.${name}.url must be an absolute HTTP(S) URL`,
         );
@@ -148,12 +160,70 @@ export function parseMcpJson(
         );
         continue;
       }
+      const headers = value.headers as Record<string, string> | undefined;
+      if (
+        options.allowRemoteEnvExpansion !== true &&
+        (value.url.includes("${") ||
+          Object.values(headers ?? {}).some((header) => header.includes("${")))
+      ) {
+        result.diagnostics.push(
+          `mcpServers.${name}: remote environment expansion requires allowMcpJsonRemoteEnvExpansion`,
+        );
+        continue;
+      }
+      const getEnv = options.getEnv ?? ((name: string) => Deno.env.get(name));
+      const url = options.allowRemoteEnvExpansion === true
+        ? expandValue(value.url, getEnv)
+        : value.url;
+      if (url === undefined) {
+        result.diagnostics.push(
+          `mcpServers.${name}: invalid or unresolved remote environment reference`,
+        );
+        continue;
+      }
+      if (!isHttpUrl(url)) {
+        result.diagnostics.push(
+          `mcpServers.${name}.url must be an absolute HTTP(S) URL`,
+        );
+        continue;
+      }
+      let expandedHeaders: Record<string, string> | undefined;
+      if (headers !== undefined && options.allowRemoteEnvExpansion === true) {
+        expandedHeaders = {};
+        let invalid = false;
+        for (const [key, header] of Object.entries(headers)) {
+          const resolved = expandValue(header, getEnv);
+          if (resolved === undefined) {
+            invalid = true;
+            break;
+          }
+          try {
+            new Headers().set(key, resolved);
+          } catch {
+            invalid = true;
+            break;
+          }
+          Object.defineProperty(expandedHeaders, key, {
+            value: resolved,
+            enumerable: true,
+            writable: true,
+          });
+        }
+        if (invalid) {
+          result.diagnostics.push(
+            `mcpServers.${name}: invalid or unresolved remote header`,
+          );
+          continue;
+        }
+      }
       result.servers.push({
         name,
         config: {
           type: "remote",
-          url: value.url,
-          ...(value.headers === undefined ? {} : { headers: value.headers }),
+          url,
+          ...(headers === undefined
+            ? {}
+            : { headers: expandedHeaders ?? headers }),
           ...timeout,
         },
       });
