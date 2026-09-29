@@ -57,7 +57,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 
 ### `.mcp.json`（既定の入力元）
 
-プロジェクトルートの `.mcp.json` にある `mcpServers` オブジェクトを読む。これは MCP プロトコルが定める共通の設定ファイルではなく、本プラグインが採用するクライアント側の設定形式の一部である。例:
+プロジェクトルートの `.mcp.json` にある `mcpServers` オブジェクトを読む。これは MCP プロトコルが定める共通の設定ファイルではなく、本プラグインが採用するクライアント側の設定形式の一部である。Agent Plugins v1 が定義するプラグイン内の `mcp.json` とは別ファイル・別形式であり、後者は読み込まない。例:
 
 ```json
 {
@@ -126,13 +126,12 @@ WebSocket は MCP の標準 transport として定義されていないため、
 
 #### タイムアウト
 
-`.mcp.json` の同じ `timeout` でも、クライアントによって対象操作が異なる。以下は [Claude Code][claude-mcp]、[Copilot CLI][copilot-cli-mcp]、[Agent Plugins 1.0.0][agent-plugins-v1]、[OpenCode V2][opencode-v2-mcp] の公開仕様と、現行実装の対照である。
+`.mcp.json` の同じ `timeout` でも、クライアントによって対象操作が異なる。以下は [Claude Code][claude-mcp] と [Copilot CLI][copilot-cli-mcp] による `.mcp.json` の解釈、[OpenCode V2][opencode-v2-mcp] の受け皿、および現行実装の対照である。
 
 | 形式・クライアント | `timeout` の意味・対象 |
 | --- | --- |
 | Claude Code の `.mcp.json` | サーバーごとのツール呼び出しの実行時間上限（ミリ秒）。1000 未満は無視し、`MCP_TOOL_TIMEOUT` またはその既定値にフォールバックする。 |
 | Copilot CLI の `.mcp.json` | ツールの発見と呼び出しのタイムアウト（ミリ秒、既定 30000）。さらに公式リファレンスは stdio の接続予算にも適用され、接続予算には 60000 ms の下限があると説明する。Claude Code の「1000 未満は無視」という規則は Copilot CLI の公開仕様には記載されていない。 |
-| Agent Plugins v1 の `mcp.json` | 閉じたサーバー定義に `timeout` は存在しない。`.mcp.json` とは別の、プラグインルートの `mcp.json` の仕様であり、本プラグインの入力元ではない。 |
 | OpenCode V2 | `timeout.startup` は接続・初期化、`timeout.catalog` はツール等の一覧取得、`timeout.execution` はツール呼び出しに加えて MCP prompt の取得と resource の読み取りに適用される。既定は順に 30 秒、30 秒、12 時間。サーバー単位で省略した項目はグローバル設定または既定値が使われる。 |
 
 現状の変換では、正の整数で指定された `.mcp.json` の `timeout` を 1000 ms 以上にして `execution` **だけ**に設定し、`startup` と `catalog` は変更しない。ツール呼び出しでは近似できるが、Copilot CLI で指定値が効くツール発見・接続には同じ指定値が適用されず、逆に OpenCode では prompt・resource の取得にも適用される。1000 ms への引き上げは本プラグインの方針であって、Copilot CLI の下限ではない。Copilot CLI に合わせて `catalog` や `startup` へも反映するかは未決であり、形式・実行元を識別できない単一の `.mcp.json` から意味を確定できるとみなさない。
@@ -145,10 +144,17 @@ WebSocket は MCP の標準 transport として定義されていないため、
 | --- | --- |
 | Claude Code の `.mcp.json` | `${VAR}` / `${VAR:-default}` を `command`、`args`、`env`、remote の `url`・`headers` で展開する。remote の URL・ヘッダーでは特定の認証用環境変数を空として扱う制限がある。未設定で既定値のない変数は警告し、原則として未展開の文字列を残す。 |
 | Copilot CLI の `.mcp.json` | 公式リファレンスが明示する `$VAR` / `${VAR}` / `${VAR:-default}` の展開対象は `env` の値と remote の `headers`。`command`・`args`・`cwd`・`url` で同じ展開を保証するとは記載されていない。CLI の追加手順では `PATH` を自動継承し、その他の環境変数は `env` で指定するよう案内する。 |
-| Agent Plugins v1 の `mcp.json` | stdio の `args`・`env` の値・`cwd` に限り、クライアントが提供する `${PLUGIN_ROOT}` と `${PLUGIN_DATA}` だけを一度だけ置換し、再帰的には展開しない。`command`、`env` のキー、remote の `url`・`headers` は展開せず、その他の環境変数参照はそのまま残す。子プロセスの基礎環境の継承・省略はクライアントが選べるが、両予約変数の提供は必須。 |
 | 現状の本プラグイン | `.mcp.json` の値を展開せずに OpenCode に渡す。stdio の `env` は `environment` として追加され、OpenCode は元のプロセス環境も継承する。したがって `env` だけで親環境の秘密値を子プロセスから隔離する仕組みではない。OpenCode の `{env:NAME}` という置換構文を、各クライアントの `${VAR}` と同一視しない。 |
 
-Claude Code → Copilot CLI → Agent Plugins v1 の順に一律に厳しくなる、という包含関係ではない。例えば Agent Plugins v1 は展開する変数名を2種類に限定する一方、`args`・`cwd` の展開を規定しており、Copilot CLI の公開リファレンスはそれらの展開を保証していない。Agent Plugins v1 は別ファイル・別スキーマであり、`timeout` の大小比較にも含められない。環境変数の自動継承も単純な大小関係ではない。今後 `.mcp.json` の展開を追加する場合は、フィールド・未設定時の扱い・秘密値の送信先と継承範囲を個別に決める。現状の未展開文字列の受け渡しが安全だという保証にはしない。
+今後 `.mcp.json` の展開を追加する場合は、フィールド・未設定時の扱い・秘密値の送信先と継承範囲を個別に決める。現状の未展開文字列の受け渡しが安全だという保証にはしない。
+
+#### 参考仕様：Agent Plugins v1 の `mcp.json`（入力対象外）
+
+[Agent Plugins 1.0.0][agent-plugins-v1] は、インストールされた Agent Plugin のルートに置く `mcp.json` を定義する。**プロジェクトルートの `.mcp.json` を定義する仕様ではない。** 本プラグインは `plugin.json` やプラグイン内の `mcp.json` を探索・検証せず、Agent Plugins v1 準拠を目指すものでもない。以下は将来の設計の参考としての対照であり、上記 `.mcp.json` の入力仕様には含めない。
+
+- 閉じたサーバー定義に `timeout` は存在しない。`.mcp.json` のタイムアウトに追加の意味を与える根拠にはならない。
+- stdio では、クライアントが提供する `${PLUGIN_ROOT}` と `${PLUGIN_DATA}` だけを `args`・`env` の値・`cwd` で一度だけ置換し、再帰的には展開しない。`command`、`env` のキー、remote の `url`・`headers` は展開せず、その他の変数参照はそのまま残す。子プロセスの基礎環境はクライアントが選べるが、両予約変数の提供は必須。
+- 展開規則を Claude Code や Copilot CLI の `.mcp.json` にそのまま適用することはできない。例えば Agent Plugins v1 は展開する変数名を2種類に限定する一方、`args`・`cwd` の展開を規定しており、Copilot CLI の公開リファレンスはそれらの展開を保証していない。適用範囲や環境変数の継承に単純な包含関係はない。
 
 ### `.codex/config.toml`（明示 opt-in の入力元）
 
