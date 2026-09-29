@@ -134,7 +134,11 @@ WebSocket は MCP の標準 transport として定義されていないため、
 | Copilot CLI の `.mcp.json` | ツールの発見と呼び出しのタイムアウト（ミリ秒、既定 30000）。さらに公式リファレンスは stdio の接続予算にも適用され、接続予算には 60000 ms の下限があると説明する。Claude Code の「1000 未満は無視」という規則は Copilot CLI の公開仕様には記載されていない。 |
 | OpenCode V2 | `timeout.startup` は接続・初期化、`timeout.catalog` はツール等の一覧取得、`timeout.execution` はツール呼び出しに加えて MCP prompt の取得と resource の読み取りに適用される。既定は順に 30 秒、30 秒、12 時間。サーバー単位で省略した項目はグローバル設定または既定値が使われる。 |
 
-現状の変換では、正の整数で指定された `.mcp.json` の `timeout` を 1000 ms 以上にして `execution` **だけ**に設定し、`startup` と `catalog` は変更しない。ツール呼び出しでは近似できるが、Copilot CLI で指定値が効くツール発見・接続には同じ指定値が適用されず、逆に OpenCode では prompt・resource の取得にも適用される。1000 ms への引き上げは本プラグインの方針であって、Copilot CLI の下限ではない。Copilot CLI に合わせて `catalog` や `startup` へも反映するかは未決であり、形式・実行元を識別できない単一の `.mcp.json` から意味を確定できるとみなさない。
+**現時点の判断:** 正の整数で指定された `.mcp.json` の `timeout` は 1000 ms 以上にして `execution` **だけ**に設定し、`startup` と `catalog` は変更しない。両クライアントに共通する「ツール呼び出しの時間上限」を変換対象にするためである。OpenCode が本来別々に設定する接続・一覧取得まで、一つの値から推測して上書きしない。未設定の `startup` と `catalog` には OpenCode のグローバル設定または既定値が適用される。
+
+Copilot CLI に寄せて `catalog` にも適用する案は、ツール発見の時間上限を再現できる一方、Claude Code の設定では一覧取得まで短い値で打ち切る変更になる。`startup` への単純な適用も、Claude Code の意味と異なるうえ Copilot CLI の接続予算には別の下限がある。現状はどちらか一方に寄せる決定打がないため、**共通部分のみ変換する方針を暫定採用**し、`catalog`・`startup` への適用は未決とする。今後、入力元の意味を区別する要件や実際の接続・発見の失敗例が得られれば見直す。
+
+この判断でも完全互換ではない。Copilot CLI では指定値が効くツール発見・接続に同じ値が適用されず、OpenCode の `execution` はツール以外の MCP prompt・resource の取得にも適用される。また、1000 ms への引き上げは本プラグインの方針であり、Copilot CLI の下限を意味しない。
 
 #### 環境変数とプレースホルダー
 
