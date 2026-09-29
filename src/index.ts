@@ -20,6 +20,10 @@ function sources(value: unknown): Source[] | undefined {
   return [...new Set(value)];
 }
 
+function toolNamespace(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 export default Plugin.define({
   id: "opencode-mcp-json-adapter",
   async setup(ctx) {
@@ -49,7 +53,7 @@ export default Plugin.define({
         "[opencode-mcp-json-adapter] options.allowMcpJsonRemoteEnvExpansion must be a boolean; remote environment expansion stays disabled",
       );
     }
-    const servers = new Map<string, ParsedServer["config"]>();
+    const servers = new Map<string, ParsedServer>();
     for (const source of selected) {
       const path = join(ctx.location.project.directory, sourceFiles[source]);
       let text: string;
@@ -69,17 +73,58 @@ export default Plugin.define({
       for (const diagnostic of result.diagnostics) {
         console.warn(`[opencode-mcp-json-adapter] ${path}: ${diagnostic}`);
       }
-      for (const { name, config } of result.servers) {
-        if (!servers.has(name)) servers.set(name, config);
+      for (const server of result.servers) {
+        if (!servers.has(server.name)) servers.set(server.name, server);
       }
     }
     if (servers.size === 0) return;
 
+    let activeFilters = new Map<
+      string,
+      NonNullable<ParsedServer["toolFilter"]>
+    >();
     await ctx.mcp.transform((editor) => {
-      for (const [name, config] of servers) {
-        if (editor.get(name) === undefined) editor.set(name, config);
+      const filters = new Map<
+        string,
+        NonNullable<ParsedServer["toolFilter"]>
+      >();
+      const names = [...servers.values()].some((server) => server.toolFilter)
+        ? [...editor.list().map(([name]) => name), ...servers.keys()]
+        : [];
+      for (const [name, server] of servers) {
+        if (editor.get(name) !== undefined) continue;
+        if (
+          server.toolFilter &&
+          names.some((other) =>
+            other !== name && toolNamespace(other) === toolNamespace(name)
+          )
+        ) {
+          // A normalized namespace collision could filter another server's tools.
+          console.warn(
+            `[opencode-mcp-json-adapter] ${name}: ambiguous MCP tool namespace; server skipped`,
+          );
+          continue;
+        }
+        editor.set(name, server.config);
+        if (server.toolFilter) {
+          filters.set(toolNamespace(name), server.toolFilter);
+        }
       }
+      activeFilters = filters;
     });
+    if ([...servers.values()].some((server) => server.toolFilter)) {
+      await ctx.tool.transform((editor) => {
+        for (const tool of editor.list()) {
+          const filter = activeFilters.get(tool.options?.namespace ?? "");
+          if (!filter) continue;
+          if (
+            (filter.enabled !== undefined &&
+              !filter.enabled.includes(tool.name)) ||
+            filter.disabled?.includes(tool.name)
+          ) editor.remove(tool.id);
+        }
+      });
+    }
   },
 });
 

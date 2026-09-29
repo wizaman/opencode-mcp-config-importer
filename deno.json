@@ -28,6 +28,10 @@
       "description": "Codex の環境変数由来ヘッダーの送信を検証する（ポート 3001・4097）",
       "command": "deno run -A scripts/smoke-codex-env-headers.ts"
     },
+    "smoke:codex-tool-filter": {
+      "description": "Codex のツール制限を stdio・HTTP・Code Mode で検証する（ポート 3001・4097・4098）",
+      "command": "deno run -A scripts/smoke-codex-tool-filter.ts"
+    },
     "remote:serve": {
       "description": "Everything の HTTP MCP サーバーを起動する（ポート 3001）",
       "command": "deno run -A --no-config --node-modules-dir=none npm:@modelcontextprotocol/server-everything/dist/index.js streamableHttp"

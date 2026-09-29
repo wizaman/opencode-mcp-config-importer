@@ -95,7 +95,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | `env` | 任意の文字列値のマップ。値の環境変数参照を展開し、OpenCode の local `environment` へ渡す。プロセス環境の継承や展開との違いは「環境変数とプレースホルダー」で説明する。 |
 | `cwd` | 任意の空白以外を含む文字列。展開せず、OpenCode の local `cwd` へ渡す。 |
 
-`url` が付いている場合は、`command` の有無にかかわらずサーバーをスキップする。HTTP 用の `headers` が付いていても現状は無視する。
+`type` を省略または `"stdio"` として `command` と `url` を併記した場合は、そのサーバーをスキップする。`command` がなく `url` だけを指定した場合は stdio 定義としての型検証に失敗し、入力ファイル全体を拒否する。HTTP 用の `headers` が付いていても現状は無視する。
 
 #### Streamable HTTP（`type: "http"` または `"streamable-http"`）
 
@@ -170,7 +170,7 @@ Copilot CLI に寄せて `catalog` にも適用するとツール発見の時間
 
 | フィールド・指定 | Copilot CLI の意味 | 現行実装と今後の扱い |
 | --- | --- | --- |
-| stdio の `type: "local"` | `"stdio"` の別名。 | Claude Code と Copilot CLI の共通の `type` ではないため、意図的に受け付けず、サーバーごとスキップする。stdio を指定するなら `"stdio"` を使用する。 |
+| stdio の `type: "local"` | `"stdio"` の別名。 | Claude Code と Copilot CLI の共通の `type` ではないため、意図的に受け付けず、型検証で入力ファイル全体を拒否する。stdio を指定するなら `"stdio"` を使用する。 |
 | `tools` | サーバーから使えるツールの絞り込み。 | 現状は無視してサーバーを登録する。OpenCode のサーバー定義にそのまま渡せるフィールドではなく、Copilot CLI 側のツール制限は再現されない。 |
 | `deferTools` / `disableToolCache` / `slowConnectionThresholdMs` | ツールの表示・キャッシュ・接続遅延の警告を制御する。 | 現状は無視してサーバーを登録する。 |
 | remote の `oauthClientId` / `oauthScopes` / `oauthPublicClient` / `oauthGrantType` | Copilot CLI 固有の OAuth クライアント設定。 | 現状は無視して remote サーバーを登録する。Copilot CLI の OAuth 設定は再現せず、必要な認証は OpenCode 側の動作に委ねる。 |
@@ -216,8 +216,9 @@ Codex のサーバー定義には `type` フィールドがない。`url` があ
 | `enabled` | 真偽値。`false` なら取り込まない。省略・`true` なら以下を検証する。型違いはファイル全体を拒否する。 |
 | `startup_timeout_sec` / `startup_timeout_ms` / `tool_timeout_sec` | Codex の秒単位の起動・ツール実行タイムアウトと、起動タイムアウトのミリ秒単位の別名。現状は無視する。OpenCode のタイムアウトとの意味・単位の対応を調べてから変換可否を判断する。 |
 | `required` | 接続失敗時の起動失敗指定。現状は無視する。OpenCode に同等の動作を保証できるか要検討。 |
-| `enabled_tools` / `disabled_tools` | ツールの許可・拒否リスト。現状は**無視してサーバーを登録する**。Codex で制限していたツールが OpenCode では見える可能性があり、優先して安全な扱いを決める必要がある。 |
-| `default_tools_approval_mode` / `[mcp_servers.<name>.tools.<tool>]` | ツールごとの `approval_mode` や `output_token_limit` を含む Codex の承認・出力制約。現状は**無視してサーバーを登録する**。権限境界の違いを踏まえ、警告・サーバー単位のスキップ・対応の可否を要検討。 |
+| `enabled_tools` / `disabled_tools` | 文字列配列のツール許可リスト・拒否リスト。型違いはファイル全体を拒否する。Codex から登録したサーバーの MCP カタログが更新されるたびに OpenCode の `tool.transform` で元のツール名に照らして除外する。許可リストが空なら全ツールを除外し、両方に載るツールは拒否する。同名の OpenCode ネイティブ定義が優先された場合はフィルタを適用しない。正規化したサーバー名が他の定義と衝突する場合は、別サーバーのツールを除外しないよう Codex サーバーごとスキップして診断する。stdio と Streamable HTTP の実接続で、一覧からの除外、ローカルのダミーモデル経由の Code Mode による呼び出し拒否、切断・再接続後の維持を確認済み。進行中のモデルリクエストが取得済みのツールスナップショットには遡及しない。 |
+| `default_tools_approval_mode` / `[mcp_servers.<name>.tools.<tool>].approval_mode` | ツールごとの承認方針。現状は**無視してサーバーを登録する**。Codex の `auto` / `prompt` / `writes` / `approve` と OpenCode の `allow` / `ask` / `deny` が同じ動作を保証するわけではない。特に `writes` はツールの読み取り専用ヒントに依存するため、再現可能な範囲を確認するまでは自動変換しない。 |
+| `[mcp_servers.<name>.tools.<tool>].output_token_limit` | ツールごとの出力トークン上限。現状は無視してサーバーを登録する。承認方針とは別の制約として、OpenCode に同等の上限を適用できるか要検討。 |
 | 上記・下記以外のサーバー項目 | 現状は無視する。未知の認証・実行・権限制約まで安全に無視できるという保証ではない。 |
 
 #### stdio（`url` なし）
@@ -229,7 +230,7 @@ Codex のサーバー定義には `type` フィールドがない。`url` があ
 | `env` | 任意の文字列値のマップ。OpenCode の local `environment` へ変換する。 |
 | `cwd` | 任意の非空文字列。OpenCode の local `cwd` へ渡す。 |
 | `env_vars` | Codex の環境変数転送指定。現状はサーバーごとスキップして診断する。`env` とは別の機能であり、ローカル・リモートの値の取得元も含めて要検討。 |
-| `experimental_environment` | `remote` を指定してリモート実行環境で stdio を起動する Codex 固有の項目。現状は無視し、OpenCode のローカル stdio として登録するため、誤実行を避ける扱いが要検討。 |
+| `experimental_environment` | Codex 固有の stdio サーバーの実行場所指定 `local` / `remote`。MCP 標準の設定項目でも HTTP の remote transport でもない。現状は無視して OpenCode のローカル stdio として登録する。リモート executor の再現は対象外とし、`remote` を指定していた場合に実行場所が変わる点は利用者側で確認する。 |
 
 HTTP 用の `http_headers` を付けても現状は無視される。`env_http_headers`、`bearer_token_env_var`、`http_headers_helper`、`auth`、`oauth`、`bearer_token` を付けた場合はサーバーをスキップする。
 
@@ -248,7 +249,7 @@ HTTP 用の `http_headers` を付けても現状は無視される。`env_http_h
 
 stdio 用の `args` / `env` / `cwd`、Codex の `experimental_environment` を併記しても現状は無視される。`env_vars` は transport にかかわらず定義全体をスキップする。
 
-トップレベルの `mcp_optional_startup_grace_ms`、`mcp_oauth_callback_port`、`mcp_oauth_callback_url` など、`mcp_servers` 以外の Codex 設定はすべて無視する。これらは現状のパーサーによる取り込み範囲外であり、Codex 全体の設定互換は目指さない。
+トップレベルの `mcp_optional_startup_grace_ms`、`mcp_oauth_callback_port`、`mcp_oauth_callback_url`、`mcp_oauth_credentials_store` など、`mcp_servers` 以外の Codex 設定はすべて無視する。これらは現状のパーサーによる取り込み範囲外であり、Codex 全体の設定互換は目指さない。
 
 Bearer と任意の環境変数由来ヘッダーは同じ opt-in にまとめるが、Codex の秘密値隔離ポリシーは再現しない。プラグインが OpenCode プロセスの環境変数を起動時に読み、登録時に秘密値を渡す。リスクとグローバル設定での適用範囲は README に記載する。
 
