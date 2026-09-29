@@ -22,6 +22,8 @@ remote の `url`・`headers` の値に `${VAR}` や `${VAR:-default}` を使う�
 
 例えば `.mcp.json` の `"headers": {"Authorization": "Bearer ${MCP_TOKEN}"}` は OpenCode プロセスの `MCP_TOKEN` をプラグイン読み込み時に展開します。remote の `env` は参照せず、未定義の変数や不正な展開結果があれば定義全体をスキップします。診断に値は出しません。**opt-in は秘密値の隔離や送信先の安全性を保証しません。** プロセス環境の値をどの URL に送るかは利用者の責任です。静的な `url`・`headers` は opt-in なしでも取り込めます。
 
+実際の送信を確認するには、ポート 3001・4097 を空けて `deno task smoke:mcp-json-remote-env` を実行します。固定 fixture・ダミー値を使った一時プロジェクトと受信用 MCP サーバーを起動し、opt-in 無効時と変数未設定時に dynamic サーバーが登録されないこと、有効時に展開後の URL とヘッダーが受信されることを確認します。既存の `.mcp.json` や現在の OpenCode セッションは変更せず、`deno test` と CI には含めません。
+
 [^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 
 ## Codex 設定の取り込み

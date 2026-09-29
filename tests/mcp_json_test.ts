@@ -111,6 +111,47 @@ Deno.test("expands stdio args and env but not command or cwd", () => {
   });
 });
 
+Deno.test("uses the OpenCode process environment when no resolver is supplied", () => {
+  const name = "ADAPTER_ENV_HEADER_PROBE";
+  const original = Deno.env.get(name);
+  try {
+    Deno.env.set(name, "dummy-process-value");
+    const parsed = parseMcpJson(
+      JSON.stringify({
+        mcpServers: {
+          local: { command: "server", args: ["${ADAPTER_ENV_HEADER_PROBE}"] },
+          remote: {
+            type: "http",
+            url: "https://example.com/mcp",
+            headers: { "X-Probe": "${ADAPTER_ENV_HEADER_PROBE}" },
+          },
+        },
+      }),
+      { allowRemoteEnvExpansion: true },
+    );
+    assert.deepEqual(parsed, {
+      servers: [
+        {
+          name: "local",
+          config: { type: "local", command: ["server", "dummy-process-value"] },
+        },
+        {
+          name: "remote",
+          config: {
+            type: "remote",
+            url: "https://example.com/mcp",
+            headers: { "X-Probe": "dummy-process-value" },
+          },
+        },
+      ],
+      diagnostics: [],
+    });
+  } finally {
+    if (original === undefined) Deno.env.delete(name);
+    else Deno.env.set(name, original);
+  }
+});
+
 Deno.test("rejects unresolved or cyclic stdio references without exposing values", () => {
   const parsed = parseMcpJson(
     JSON.stringify({

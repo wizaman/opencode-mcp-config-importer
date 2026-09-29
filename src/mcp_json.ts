@@ -171,7 +171,7 @@ export function parseMcpJson(
         );
         continue;
       }
-      const getEnv = options.getEnv ?? ((name: string) => Deno.env.get(name));
+      const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
       const url = options.allowRemoteEnvExpansion === true
         ? expandValue(value.url, getEnv)
         : value.url;
@@ -272,7 +272,7 @@ export function parseMcpJson(
         args: value.args ?? [],
         env: value.env ?? {},
       },
-      options.getEnv ?? ((name) => Deno.env.get(name)),
+      options.getEnv ?? ((name) => process.env[name]),
     );
     if (!expanded) {
       result.diagnostics.push(
