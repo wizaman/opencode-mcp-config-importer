@@ -77,19 +77,33 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 }
 ```
 
+#### 共通の構造・フィールド
+
 | フィールド | 入力形式・対応方針 |
 | --- | --- |
 | `mcpServers` | 必須のオブジェクト。キーをサーバー名、値を定義オブジェクトとして扱う。欠落・型違いはファイル全体を解析せず診断する。空オブジェクトは可。 |
 | `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` は Streamable HTTP。その他（`"sse"` を含む）はサーバーごとスキップする。 |
-| `command` | stdio で必須の空白以外を含む文字列。OpenCode の local `command` 配列の先頭へ変換する。 |
-| `args` | stdio で任意の文字列配列。`command` の後ろへ追加する。 |
-| `env` | stdio で任意の文字列値のマップ。OpenCode の local `environment` へ変換する。 |
-| `cwd` | stdio で任意の空白以外を含む文字列。OpenCode の local `cwd` へ渡す。 |
-| `url` | `type: "http"` で必須の絶対 HTTP(S) URL。OpenCode の remote `url` へ渡す。`type` が省略または `"stdio"` の場合は、`url` があればサーバーをスキップする。 |
-| `headers` | `type: "http"` で任意の文字列値のマップ。OpenCode の remote `headers` へ渡す。 |
-| 上記以外のフィールド | 現状は検証せず無視する。OAuth や権限制約など、別のクライアント固有の項目をここから推測・変換しない。制約の黙殺は安全上の要検討事項。 |
+| 上記・下記以外のフィールド | 現状は検証せず無視する。OAuth や権限制約など、別のクライアント固有の項目をここから推測・変換しない。制約の黙殺は安全上の要検討事項。 |
 
-`type: "http"` に stdio 用の `command` / `args` / `env` / `cwd` を併記しても現状は無視され、stdio に `headers` を付けても無視される。旧式の HTTP+SSE transport は、MCP 2026-07-28 仕様で非推奨となったため意図的に対象外とする。Streamable HTTP のレスポンスで使われる SSE を除外するという意味ではない。[^mcp-2026-07-28]
+#### stdio（`type` 省略または `"stdio"`）
+
+| フィールド | 入力形式・対応方針 |
+| --- | --- |
+| `command` | 必須の空白以外を含む文字列。OpenCode の local `command` 配列の先頭へ変換する。 |
+| `args` | 任意の文字列配列。`command` の後ろへ追加する。 |
+| `env` | 任意の文字列値のマップ。OpenCode の local `environment` へ変換する。 |
+| `cwd` | 任意の空白以外を含む文字列。OpenCode の local `cwd` へ渡す。 |
+
+`url` が付いている場合は、`command` の有無にかかわらずサーバーをスキップする。HTTP 用の `headers` が付いていても現状は無視する。
+
+#### Streamable HTTP（`type: "http"`）
+
+| フィールド | 入力形式・対応方針 |
+| --- | --- |
+| `url` | 必須の絶対 HTTP(S) URL。OpenCode の remote `url` へ渡す。 |
+| `headers` | 任意の文字列値のマップ。OpenCode の remote `headers` へ渡す。 |
+
+stdio 用の `command` / `args` / `env` / `cwd` を併記しても現状は無視される。旧式の HTTP+SSE transport は、MCP 2026-07-28 仕様で非推奨となったため意図的に対象外とする。Streamable HTTP のレスポンスで使われる SSE を除外するという意味ではない。[^mcp-2026-07-28]
 
 ### `.codex/config.toml`（明示 opt-in の入力元）
 
@@ -111,27 +125,47 @@ bearer_token_env_var = "MCP_TOKEN"
 
 後者の `env_http_headers` と `bearer_token_env_var` を含むサーバーを取り込むには、前述の `sources` に加えてプラグイン設定で `"allowCodexEnvHttpHeaders": true` が必要。真偽値の `true` 以外では有効にならない。以下は [Codex の MCP 設定項目][codex-mcp] と現行パーサーの対応関係であり、OpenCode ネイティブの設定項目一覧ではない。
 
+#### 共通の構造・フィールド
+
+Codex のサーバー定義には `type` フィールドがない。`url` があれば Streamable HTTP、それ以外は stdio として扱う。ただし `url` と `command` を同時に指定するとサーバーをスキップする。
+
 | フィールド | 入力形式・現行の対応方針 |
 | --- | --- |
 | `mcp_servers.<name>` | トップレベルのテーブル。キーをサーバー名として扱う。`mcp_servers` がなければ何も追加しない。テーブル以外は診断する。 |
 | `enabled` | 真偽値。`false` なら取り込まない。省略・`true` なら以下を検証する。型違いはサーバーごとスキップする。 |
-| `command` / `args` / `env` / `cwd` | stdio 用。`command` は必須の非空文字列、`args` は文字列配列、`env` は文字列値のマップ、`cwd` は非空文字列。OpenCode の local 定義へ変換する。 |
-| `url` / `http_headers` | Streamable HTTP 用。`url` は必須の絶対 HTTP(S) URL、`http_headers` は任意の文字列値のマップ。OpenCode の remote 定義へ変換する。`url` と `command` の併用はスキップする。 |
-| `env_http_headers` | ヘッダー名と環境変数名の文字列マップ。既定ではサーバー定義ごとスキップ。`allowCodexEnvHttpHeaders: true` 時のみ環境変数を読み、未設定・空白ならそのヘッダーを省略し、値があれば同名の静的ヘッダーより優先する。stdio には使えない。 |
-| `bearer_token_env_var` | Bearer トークンの環境変数名を表す非空文字列。既定ではサーバー定義ごとスキップ。同じ opt-in 時に `Authorization: Bearer <値>` を組み立て、同名の静的・環境変数由来ヘッダーより優先する。未設定・空白・不正な値ならサーバーごとスキップし、認証なしで登録しない。stdio には使えない。OAuth のログイン・更新は実装しない。 |
-| `env_vars` | Codex の stdio 向け環境変数転送指定。現状はサーバーごとスキップして診断する。`env` とは別の機能であり、ローカル・リモートの値の取得元も含めて要検討。 |
-| `http_headers_helper` | 動的ヘッダー取得コマンド。現状はサーバーごとスキップして診断する。再取得・再試行やコマンド実行を伴うため、静的ヘッダーへの変換はしない。 |
-| `auth` / `[mcp_servers.<name>.oauth]` | Codex の認証選択（`oauth` / `chatgpt`）や OAuth クライアント設定（`client_id`、`callback_url`、`callback_port`）。現状はサーバーごとスキップして診断する。OpenCode ネイティブの OAuth と同一視して自動変換しない。OAuth が必要でもこれらの項目がなければ、取り込んだ remote サーバーへの認証は OpenCode に任せる。 |
-| `scopes` / `oauth_resource` | Codex が OAuth で要求するスコープの配列と対象リソースの指定。現状は無視する。認証の対象・権限が変わる可能性があるため、黙殺の安全性を要検討。 |
-| `bearer_token` | パーサーが認証の黙殺を避けるため拒否する項目。現状はサーバーごとスキップして診断する。Codex の一般的な設定項目としてのサポートを意味しない。 |
 | `startup_timeout_sec` / `startup_timeout_ms` / `tool_timeout_sec` | Codex の秒単位の起動・ツール実行タイムアウトと、起動タイムアウトのミリ秒単位の別名。現状は無視する。OpenCode のタイムアウトとの意味・単位の対応を調べてから変換可否を判断する。 |
 | `required` | 接続失敗時の起動失敗指定。現状は無視する。OpenCode に同等の動作を保証できるか要検討。 |
 | `enabled_tools` / `disabled_tools` | ツールの許可・拒否リスト。現状は**無視してサーバーを登録する**。Codex で制限していたツールが OpenCode では見える可能性があり、優先して安全な扱いを決める必要がある。 |
 | `default_tools_approval_mode` / `[mcp_servers.<name>.tools.<tool>]` | ツールごとの `approval_mode` や `output_token_limit` を含む Codex の承認・出力制約。現状は**無視してサーバーを登録する**。権限境界の違いを踏まえ、警告・サーバー単位のスキップ・対応の可否を要検討。 |
-| `experimental_environment` | `remote` を指定してリモート実行環境で stdio を起動する Codex 固有の項目。現状は無視し、OpenCode のローカル stdio として登録するため、誤実行を避ける扱いが要検討。 |
-| 上記以外のサーバー項目 | 現状は無視する。未知の認証・実行・権限制約まで安全に無視できるという保証ではない。 |
+| 上記・下記以外のサーバー項目 | 現状は無視する。未知の認証・実行・権限制約まで安全に無視できるという保証ではない。 |
 
-`url` がないサーバーでは有効な `command` が必要であり、どちらもなければスキップする。remote に stdio 用の `args` / `env` / `cwd` を併記しても現状は無視され、stdio に HTTP 用の `http_headers` を付けても無視される。`env_http_headers` と `bearer_token_env_var` だけは stdio に付けるとサーバーをスキップする。
+#### stdio（`url` なし）
+
+| フィールド | 入力形式・現行の対応方針 |
+| --- | --- |
+| `command` | 必須の非空文字列。OpenCode の local `command` 配列の先頭へ変換する。未指定・不正ならサーバーをスキップする。 |
+| `args` | 任意の文字列配列。`command` の後ろへ追加する。 |
+| `env` | 任意の文字列値のマップ。OpenCode の local `environment` へ変換する。 |
+| `cwd` | 任意の非空文字列。OpenCode の local `cwd` へ渡す。 |
+| `env_vars` | Codex の環境変数転送指定。現状はサーバーごとスキップして診断する。`env` とは別の機能であり、ローカル・リモートの値の取得元も含めて要検討。 |
+| `experimental_environment` | `remote` を指定してリモート実行環境で stdio を起動する Codex 固有の項目。現状は無視し、OpenCode のローカル stdio として登録するため、誤実行を避ける扱いが要検討。 |
+
+HTTP 用の `http_headers` を付けても現状は無視される。`env_http_headers`、`bearer_token_env_var`、`http_headers_helper`、`auth`、`oauth`、`bearer_token` を付けた場合はサーバーをスキップする。
+
+#### Streamable HTTP（`url` あり）
+
+| フィールド | 入力形式・現行の対応方針 |
+| --- | --- |
+| `url` | 必須の絶対 HTTP(S) URL。OpenCode の remote `url` へ渡す。`command` との併用はスキップする。 |
+| `http_headers` | 任意の文字列値のマップ。OpenCode の remote `headers` へ変換する。 |
+| `env_http_headers` | ヘッダー名と環境変数名の文字列マップ。既定ではサーバー定義ごとスキップ。`allowCodexEnvHttpHeaders: true` 時のみ環境変数を読み、未設定・空白ならそのヘッダーを省略し、値があれば同名の静的ヘッダーより優先する。 |
+| `bearer_token_env_var` | Bearer トークンの環境変数名を表す非空文字列。既定ではサーバー定義ごとスキップ。同じ opt-in 時に `Authorization: Bearer <値>` を組み立て、同名の静的・環境変数由来ヘッダーより優先する。未設定・空白・不正な値ならサーバーごとスキップし、認証なしで登録しない。OAuth のログイン・更新は実装しない。 |
+| `http_headers_helper` | 動的ヘッダー取得コマンド。現状はサーバーごとスキップして診断する。再取得・再試行やコマンド実行を伴うため、静的ヘッダーへの変換はしない。 |
+| `auth` / `[mcp_servers.<name>.oauth]` | Codex の認証選択（`oauth` / `chatgpt`）や OAuth クライアント設定（`client_id`、`callback_url`、`callback_port`）。現状はサーバーごとスキップして診断する。OpenCode ネイティブの OAuth と同一視して自動変換しない。OAuth が必要でもこれらの項目がなければ、取り込んだ remote サーバーへの認証は OpenCode に任せる。 |
+| `scopes` / `oauth_resource` | Codex が OAuth で要求するスコープの配列と対象リソースの指定。現状は無視する。認証の対象・権限が変わる可能性があるため、黙殺の安全性を要検討。 |
+| `bearer_token` | パーサーが認証の黙殺を避けるため拒否する項目。現状はサーバーごとスキップして診断する。Codex の一般的な設定項目としてのサポートを意味しない。 |
+
+stdio 用の `args` / `env` / `cwd`、Codex の `experimental_environment` を併記しても現状は無視される。`env_vars` は transport にかかわらず定義全体をスキップする。
 
 トップレベルの `mcp_optional_startup_grace_ms`、`mcp_oauth_callback_port`、`mcp_oauth_callback_url` など、`mcp_servers` 以外の Codex 設定はすべて無視する。これらは現状のパーサーによる取り込み範囲外であり、Codex 全体の設定互換は目指さない。
 
