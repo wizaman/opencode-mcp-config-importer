@@ -115,23 +115,3 @@ release taskは最低限、
 を再現可能にする。
 
 Git tagやGitHub Releaseの生成をrelease taskに含めるかは、初期実装では必須としない。
-
-## 構成
-
-```text
-package.json
-deno.json
-deno.lock
-src/
-  index.ts
-  parse_result.ts
-  mcp_json/
-    index.ts
-    schema.ts
-  codex/
-    index.ts
-tests/
-  ...
-README.md
-LICENSE
-```
