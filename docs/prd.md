@@ -82,7 +82,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | フィールド | 入力形式・対応方針 |
 | --- | --- |
 | `mcpServers` | 必須のオブジェクト。キーをサーバー名、値を定義オブジェクトとして扱う。欠落・型違いはファイル全体を解析せず診断する。空オブジェクトは可。 |
-| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` は Streamable HTTP。その他（`"sse"` を含む）はサーバーごとスキップする。 |
+| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` は Streamable HTTP。`"sse"` は後述のとおり非対応。それ以外の値もサーバーごとスキップする。 |
 | 上記・下記以外のフィールド | 現状は検証せず無視する。OAuth や権限制約など、別のクライアント固有の項目をここから推測・変換しない。制約の黙殺は安全上の要検討事項。 |
 
 #### stdio（`type` 省略または `"stdio"`）
@@ -103,7 +103,21 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | `url` | 必須の絶対 HTTP(S) URL。OpenCode の remote `url` へ渡す。 |
 | `headers` | 任意の文字列値のマップ。OpenCode の remote `headers` へ渡す。 |
 
-stdio 用の `command` / `args` / `env` / `cwd` を併記しても現状は無視される。旧式の HTTP+SSE transport は、MCP 2026-07-28 仕様で非推奨となったため意図的に対象外とする。Streamable HTTP のレスポンスで使われる SSE を除外するという意味ではない。[^mcp-2026-07-28]
+stdio 用の `command` / `args` / `env` / `cwd` を併記しても現状は無視される。
+
+#### 旧式 HTTP+SSE（`type: "sse"`）
+
+例えば次の定義は、サーバーごとスキップして診断する。
+
+```json
+{
+  "mcpServers": {
+    "legacy": { "type": "sse", "url": "https://example.com/sse" }
+  }
+}
+```
+
+SSE 用のフィールドは変換・検証しない。旧式の HTTP+SSE transport は MCP 2026-07-28 仕様で非推奨となったため、意図的に対象外とする。これは Streamable HTTP のレスポンスで使われる SSE を除外するという意味ではない。[^mcp-2026-07-28]
 
 ### `.codex/config.toml`（明示 opt-in の入力元）
 
