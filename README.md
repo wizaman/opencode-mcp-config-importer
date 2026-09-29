@@ -3,7 +3,7 @@
 
 対応する transport は stdio と Streamable HTTP です。`.mcp.json` の `type: "http"` と `type: "streamable-http"` は同じ Streamable HTTP として取り込みます。旧式の HTTP+SSE transport（`type: "sse"` など）は、MCP 2026-07-28 仕様で非推奨となったため意図的に取り込みません。Streamable HTTP 内で使われる SSE レスポンスとは別の話です。`type: "ws"` は MCP の標準 transport ではないため取り込みません。[^mcp-2026-07-28]
 
-`.mcp.json` のサーバー別 `timeout` は正の整数（ミリ秒）を受け付け、1000 未満なら 1000 に引き上げて OpenCode の `timeout.execution` に渡します。未指定なら OpenCode の既定値（通常12時間、グローバルの `mcp.timeout.execution` があればその値）を使い、0・負数・不正な型・小数の場合はサーバー定義をスキップします。Claude Code ではツール呼び出し向けの指定ですが、OpenCode の `execution` は prompt・resource の取得にも適用されるため、適用範囲は完全には一致しません。
+`.mcp.json` のサーバー別 `timeout` は正の整数（ミリ秒）を受け付け、1000 未満なら 1000 に引き上げて OpenCode の `timeout.execution` に渡します。未指定なら OpenCode の既定値（通常12時間、グローバルの `mcp.timeout.execution` があればその値）を使い、0・負数・不正な型・小数の場合はサーバー定義をスキップします。Claude Code ではツール呼び出し向けですが、Copilot CLI ではツール発見にも適用されます。本プラグインでは発見用の `timeout.catalog` を変更せず、OpenCode の `execution` は MCP prompt・resource の取得にも適用されるため、どちらとも完全には一致しません。環境変数展開を含む形式ごとの差異は [PRD のタイムアウト・環境変数の節](docs/prd.md#タイムアウト)を参照してください。
 
 [^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 

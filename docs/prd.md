@@ -83,7 +83,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | --- | --- |
 | `mcpServers` | 必須のオブジェクト。キーをサーバー名、値を定義オブジェクトとして扱う。欠落・型違いはファイル全体を解析せず診断する。空オブジェクトは可。 |
 | `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` または `"streamable-http"` は Streamable HTTP。`"sse"` と `"ws"` は後述のとおり非対応。それ以外の値もサーバーごとスキップする。 |
-| `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通のツール呼び出しタイムアウト（ミリ秒）。正の安全な整数を受け付け、1000 未満は 1000 に引き上げて OpenCode のサーバー単位の `timeout.execution` に渡す。未指定時は OpenCode の既定値またはグローバル設定を使う。0・負数・型違い・整数以外はサーバーをスキップして診断する。OpenCode ではツール以外に prompt・resource の取得にも適用されるため、完全に同じ意味ではない。 |
+| `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通。正の安全な整数（ミリ秒）を受け付け、現状は 1000 未満を 1000 に引き上げて OpenCode の `timeout.execution` に渡す。未指定なら OpenCode の既定値またはグローバル設定を使う。0・負数・型違い・整数以外はサーバーをスキップして診断する。クライアント間の意味の違いは「タイムアウト」で説明する。 |
 | 上記・下記以外のフィールド | 現状は検証せず無視する。OAuth や権限制約など、別のクライアント固有の項目をここから推測・変換しない。制約の黙殺は安全上の要検討事項。 |
 
 #### stdio（`type` 省略または `"stdio"`）
@@ -92,7 +92,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | --- | --- |
 | `command` | 必須の空白以外を含む文字列。OpenCode の local `command` 配列の先頭へ変換する。 |
 | `args` | 任意の文字列配列。`command` の後ろへ追加する。 |
-| `env` | 任意の文字列値のマップ。OpenCode の local `environment` へ変換する。 |
+| `env` | 任意の文字列値のマップ。現状は値を展開せず、OpenCode の local `environment` へ渡す。プロセス環境の継承や展開との違いは「環境変数とプレースホルダー」で説明する。 |
 | `cwd` | 任意の空白以外を含む文字列。OpenCode の local `cwd` へ渡す。 |
 
 `url` が付いている場合は、`command` の有無にかかわらずサーバーをスキップする。HTTP 用の `headers` が付いていても現状は無視する。
@@ -123,6 +123,32 @@ SSE 用のフィールドは変換・検証しない。旧式の HTTP+SSE transp
 #### WebSocket（`type: "ws"`）
 
 WebSocket は MCP の標準 transport として定義されていないため、サーバーごとスキップして診断する。WebSocket 用の `wss://` URL やその他のフィールドは変換・検証しない。
+
+#### タイムアウト
+
+`.mcp.json` の同じ `timeout` でも、クライアントによって対象操作が異なる。以下は [Claude Code][claude-mcp]、[Copilot CLI][copilot-cli-mcp]、[Agent Plugins 1.0.0][agent-plugins-v1]、[OpenCode V2][opencode-v2-mcp] の公開仕様と、現行実装の対照である。
+
+| 形式・クライアント | `timeout` の意味・対象 |
+| --- | --- |
+| Claude Code の `.mcp.json` | サーバーごとのツール呼び出しの実行時間上限（ミリ秒）。1000 未満は無視し、`MCP_TOOL_TIMEOUT` またはその既定値にフォールバックする。 |
+| Copilot CLI の `.mcp.json` | ツールの発見と呼び出しのタイムアウト（ミリ秒、既定 30000）。さらに公式リファレンスは stdio の接続予算にも適用され、接続予算には 60000 ms の下限があると説明する。Claude Code の「1000 未満は無視」という規則は Copilot CLI の公開仕様には記載されていない。 |
+| Agent Plugins v1 の `mcp.json` | 閉じたサーバー定義に `timeout` は存在しない。`.mcp.json` とは別の、プラグインルートの `mcp.json` の仕様であり、本プラグインの入力元ではない。 |
+| OpenCode V2 | `timeout.startup` は接続・初期化、`timeout.catalog` はツール等の一覧取得、`timeout.execution` はツール呼び出しに加えて MCP prompt の取得と resource の読み取りに適用される。既定は順に 30 秒、30 秒、12 時間。サーバー単位で省略した項目はグローバル設定または既定値が使われる。 |
+
+現状の変換では、正の整数で指定された `.mcp.json` の `timeout` を 1000 ms 以上にして `execution` **だけ**に設定し、`startup` と `catalog` は変更しない。ツール呼び出しでは近似できるが、Copilot CLI で指定値が効くツール発見・接続には同じ指定値が適用されず、逆に OpenCode では prompt・resource の取得にも適用される。1000 ms への引き上げは本プラグインの方針であって、Copilot CLI の下限ではない。Copilot CLI に合わせて `catalog` や `startup` へも反映するかは未決であり、形式・実行元を識別できない単一の `.mcp.json` から意味を確定できるとみなさない。
+
+#### 環境変数とプレースホルダー
+
+`env` は stdio サーバー**プロセスに渡す**名前と値のマップであり、設定ファイル内の `$VAR` や `${VAR}` を**展開する機能**とは別である。例えば `"env": {"API_KEY": "${MY_TOKEN}"}` は、展開するクライアントではクライアント側環境の `MY_TOKEN` を読み、子プロセスへ `API_KEY` として渡す。単に `env` に値を追加するだけでは `MY_TOKEN` は展開されない。どの環境変数が子プロセスに自動で継承されるかも別の問題である。
+
+| 形式・クライアント | 展開対象と子プロセス環境 |
+| --- | --- |
+| Claude Code の `.mcp.json` | `${VAR}` / `${VAR:-default}` を `command`、`args`、`env`、remote の `url`・`headers` で展開する。remote の URL・ヘッダーでは特定の認証用環境変数を空として扱う制限がある。未設定で既定値のない変数は警告し、原則として未展開の文字列を残す。 |
+| Copilot CLI の `.mcp.json` | 公式リファレンスが明示する `$VAR` / `${VAR}` / `${VAR:-default}` の展開対象は `env` の値と remote の `headers`。`command`・`args`・`cwd`・`url` で同じ展開を保証するとは記載されていない。CLI の追加手順では `PATH` を自動継承し、その他の環境変数は `env` で指定するよう案内する。 |
+| Agent Plugins v1 の `mcp.json` | stdio の `args`・`env` の値・`cwd` に限り、クライアントが提供する `${PLUGIN_ROOT}` と `${PLUGIN_DATA}` だけを一度だけ置換し、再帰的には展開しない。`command`、`env` のキー、remote の `url`・`headers` は展開せず、その他の環境変数参照はそのまま残す。子プロセスの基礎環境の継承・省略はクライアントが選べるが、両予約変数の提供は必須。 |
+| 現状の本プラグイン | `.mcp.json` の値を展開せずに OpenCode に渡す。stdio の `env` は `environment` として追加され、OpenCode は元のプロセス環境も継承する。したがって `env` だけで親環境の秘密値を子プロセスから隔離する仕組みではない。OpenCode の `{env:NAME}` という置換構文を、各クライアントの `${VAR}` と同一視しない。 |
+
+Claude Code → Copilot CLI → Agent Plugins v1 の順に一律に厳しくなる、という包含関係ではない。例えば Agent Plugins v1 は展開する変数名を2種類に限定する一方、`args`・`cwd` の展開を規定しており、Copilot CLI の公開リファレンスはそれらの展開を保証していない。Agent Plugins v1 は別ファイル・別スキーマであり、`timeout` の大小比較にも含められない。環境変数の自動継承も単純な大小関係ではない。今後 `.mcp.json` の展開を追加する場合は、フィールド・未設定時の扱い・秘密値の送信先と継承範囲を個別に決める。現状の未展開文字列の受け渡しが安全だという保証にはしない。
 
 ### `.codex/config.toml`（明示 opt-in の入力元）
 
@@ -191,6 +217,10 @@ stdio 用の `args` / `env` / `cwd`、Codex の `experimental_environment` を�
 Bearer と任意の環境変数由来ヘッダーは同じ opt-in にまとめるが、Codex の秘密値隔離ポリシーは再現しない。プラグインが OpenCode プロセスの環境変数を起動時に読み、登録時に秘密値を渡す。リスクとグローバル設定での適用範囲は README に記載する。
 
 [codex-mcp]: https://developers.openai.com/codex/mcp
+[claude-mcp]: https://code.claude.com/docs/en/mcp
+[copilot-cli-mcp]: https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference#mcp-server-configuration
+[agent-plugins-v1]: https://agent-plugins.org/specification#7-2-mcp-servers
+[opencode-v2-mcp]: https://opencode.ai/v2/docs/mcp-servers#timeouts
 
 [^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 
