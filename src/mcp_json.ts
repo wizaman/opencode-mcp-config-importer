@@ -49,9 +49,13 @@ const HttpSchema = v.object({
   headers: v.optional(StringRecordSchema),
 });
 
+type ServerIssue =
+  | v.InferIssue<typeof StdioSchema>
+  | v.InferIssue<typeof HttpSchema>;
+
 function invalidField(
   name: string,
-  issues: readonly v.BaseIssue<unknown>[],
+  issues: readonly ServerIssue[],
 ): string {
   const key = issues[0]?.path?.[0]?.key;
   switch (key) {
