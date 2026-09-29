@@ -1,21 +1,36 @@
 import type { Mcp } from "@opencode/plugin";
 import { parse } from "smol-toml";
+import * as v from "valibot";
 import type { ParseResult } from "../parse_result.ts";
+import {
+  EnabledSchema,
+  LocalSchema,
+  RemoteSchema,
+  RootSchema,
+  TableSchema,
+} from "./schema.ts";
+import type { ServerIssue } from "./schema.ts";
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringRecord(value: unknown): value is Record<string, string> {
-  return isObject(value) &&
-    Object.values(value).every((item) => typeof item === "string");
-}
-
-function isHttpUrl(value: string): boolean {
-  try {
-    return ["http:", "https:"].includes(new URL(value).protocol);
-  } catch {
-    return false;
+function invalidField(field: string, issues: readonly ServerIssue[]): string {
+  switch (issues[0]?.path?.[0]?.key) {
+    case "url":
+      return `${field}.url must be an absolute HTTP(S) URL`;
+    case "http_headers":
+      return `${field}.http_headers must contain only string values`;
+    case "env_http_headers":
+      return `${field}.env_http_headers must contain only string values`;
+    case "bearer_token_env_var":
+      return `${field}.bearer_token_env_var must be a non-empty string`;
+    case "command":
+      return `${field}.command must be a non-empty string`;
+    case "args":
+      return `${field}.args must be an array of strings`;
+    case "env":
+      return `${field}.env must contain only string values`;
+    case "cwd":
+      return `${field}.cwd must be a non-empty string`;
+    default:
+      return `${field}: invalid server definition`;
   }
 }
 
@@ -37,23 +52,32 @@ export function parseCodexToml(
     result.diagnostics.push("invalid TOML");
     return result;
   }
-  if (isObject(input) && input.mcp_servers === undefined) return result;
-  if (!isObject(input) || !isObject(input.mcp_servers)) {
+  if (
+    v.is(TableSchema, input) && input.mcp_servers !== undefined &&
+    !v.is(TableSchema, input.mcp_servers)
+  ) {
     result.diagnostics.push("mcp_servers must be a table");
     return result;
   }
+  const root = v.safeParse(RootSchema, input);
+  if (!root.success) {
+    result.diagnostics.push("mcp_servers must be a table");
+    return result;
+  }
+  if (root.output.mcp_servers === undefined) return result;
 
-  for (const [name, value] of Object.entries(input.mcp_servers)) {
+  for (const [name, value] of Object.entries(root.output.mcp_servers)) {
     const field = `mcp_servers.${name}`;
-    if (!isObject(value)) {
+    if (!v.is(TableSchema, value)) {
       result.diagnostics.push(`${field} must be a table`);
       continue;
     }
-    if (value.enabled !== undefined && typeof value.enabled !== "boolean") {
+    const enabled = v.safeParse(EnabledSchema, value);
+    if (!enabled.success) {
       result.diagnostics.push(`${field}.enabled must be a boolean`);
       continue;
     }
-    if (value.enabled === false) continue;
+    if (enabled.output.enabled === false) continue;
     // Do not silently drop unsupported authentication settings.
     const unsupported = [
       "bearer_token",
@@ -82,12 +106,9 @@ export function parseCodexToml(
         result.diagnostics.push(`${field}: command and url cannot be combined`);
         continue;
       }
-      if (typeof value.url !== "string" || !isHttpUrl(value.url)) {
-        result.diagnostics.push(`${field}.url must be an absolute HTTP(S) URL`);
-        continue;
-      }
       if (
-        value.http_headers !== undefined && !stringRecord(value.http_headers)
+        value.http_headers !== undefined &&
+        !v.is(TableSchema, value.http_headers)
       ) {
         result.diagnostics.push(
           `${field}.http_headers must contain only string values`,
@@ -96,24 +117,21 @@ export function parseCodexToml(
       }
       if (
         value.env_http_headers !== undefined &&
-        !stringRecord(value.env_http_headers)
+        !v.is(TableSchema, value.env_http_headers)
       ) {
         result.diagnostics.push(
           `${field}.env_http_headers must contain only string values`,
         );
         continue;
       }
-      if (
-        value.bearer_token_env_var !== undefined &&
-        (typeof value.bearer_token_env_var !== "string" ||
-          !value.bearer_token_env_var.trim())
-      ) {
-        result.diagnostics.push(
-          `${field}.bearer_token_env_var must be a non-empty string`,
-        );
+      const parsed = v.safeParse(RemoteSchema, value);
+      if (!parsed.success) {
+        result.diagnostics.push(invalidField(field, parsed.issues));
         continue;
       }
-      const headers = { ...(value.http_headers ?? {}) };
+      const { url, http_headers, env_http_headers, bearer_token_env_var } =
+        parsed.output;
+      const headers = { ...(http_headers ?? {}) };
       const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
       const setHeader = (name: string, resolved: string) => {
         for (const existing of Object.keys(headers)) {
@@ -128,8 +146,8 @@ export function parseCodexToml(
           configurable: true,
         });
       };
-      if (value.env_http_headers !== undefined) {
-        for (const [name, variable] of Object.entries(value.env_http_headers)) {
+      if (env_http_headers !== undefined) {
+        for (const [name, variable] of Object.entries(env_http_headers)) {
           let resolved: string | undefined;
           try {
             resolved = getEnv(variable);
@@ -152,10 +170,10 @@ export function parseCodexToml(
           setHeader(name, resolved);
         }
       }
-      if (value.bearer_token_env_var !== undefined) {
+      if (bearer_token_env_var !== undefined) {
         let token: string | undefined;
         try {
-          token = getEnv(value.bearer_token_env_var);
+          token = getEnv(bearer_token_env_var);
         } catch {
           // Codex fails the connection when its configured bearer credential is missing.
         }
@@ -178,10 +196,10 @@ export function parseCodexToml(
       }
       const config: Mcp.ServerConfig = {
         type: "remote",
-        url: value.url,
-        ...(value.http_headers === undefined &&
-            value.env_http_headers === undefined &&
-            value.bearer_token_env_var === undefined
+        url,
+        ...(http_headers === undefined &&
+            env_http_headers === undefined &&
+            bearer_token_env_var === undefined
           ? {}
           : { headers }),
       };
@@ -197,34 +215,21 @@ export function parseCodexToml(
       );
       continue;
     }
-    if (typeof value.command !== "string" || !value.command.trim()) {
-      result.diagnostics.push(`${field}.command must be a non-empty string`);
-      continue;
-    }
-    if (
-      value.args !== undefined &&
-      (!Array.isArray(value.args) ||
-        !value.args.every((arg: unknown) => typeof arg === "string"))
-    ) {
-      result.diagnostics.push(`${field}.args must be an array of strings`);
-      continue;
-    }
-    if (value.env !== undefined && !stringRecord(value.env)) {
+    if (value.env !== undefined && !v.is(TableSchema, value.env)) {
       result.diagnostics.push(`${field}.env must contain only string values`);
       continue;
     }
-    if (
-      value.cwd !== undefined &&
-      (typeof value.cwd !== "string" || !value.cwd.trim())
-    ) {
-      result.diagnostics.push(`${field}.cwd must be a non-empty string`);
+    const parsed = v.safeParse(LocalSchema, value);
+    if (!parsed.success) {
+      result.diagnostics.push(invalidField(field, parsed.issues));
       continue;
     }
+    const { command, args, env, cwd } = parsed.output;
     const config: Mcp.ServerConfig = {
       type: "local",
-      command: [value.command, ...(value.args ?? [])],
-      ...(value.env === undefined ? {} : { environment: { ...value.env } }),
-      ...(value.cwd === undefined ? {} : { cwd: value.cwd }),
+      command: [command, ...(args ?? [])],
+      ...(env === undefined ? {} : { environment: { ...env } }),
+      ...(cwd === undefined ? {} : { cwd }),
     };
     result.servers.push({ name, config });
   }

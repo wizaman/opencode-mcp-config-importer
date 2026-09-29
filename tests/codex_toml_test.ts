@@ -74,6 +74,39 @@ Deno.test("rejects malformed TOML without showing input", () => {
   ]);
 });
 
+Deno.test("Valibot rejects arrays and invalid fields without dropping other servers", () => {
+  const parsed = parseCodexToml(
+    `
+[mcp_servers.bad_enabled]
+enabled = "no"
+command = "server"
+[mcp_servers.bad_env]
+command = "server"
+env = ["secret"]
+[mcp_servers.bad_headers]
+url = "https://example.com/mcp"
+http_headers = ["secret"]
+[mcp_servers.bad_env_headers]
+url = "https://example.com/mcp"
+env_http_headers = ["secret"]
+[mcp_servers.good]
+command = "server"
+unknown = "ignored"
+`,
+    { allowEnvHttpHeaders: true },
+  );
+  assert.deepEqual(parsed.servers, [{
+    name: "good",
+    config: { type: "local", command: ["server"] },
+  }]);
+  assert.deepEqual(parsed.diagnostics, [
+    "mcp_servers.bad_enabled.enabled must be a boolean",
+    "mcp_servers.bad_env.env must contain only string values",
+    "mcp_servers.bad_headers.http_headers must contain only string values",
+    "mcp_servers.bad_env_headers.env_http_headers must contain only string values",
+  ]);
+});
+
 Deno.test("env HTTP headers are disabled by default without reading the environment", () => {
   const parsed = parseCodexToml(
     `
