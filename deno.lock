@@ -2,7 +2,8 @@
   "version": "5",
   "specifiers": {
     "npm:@opencode/plugin@^2.0.16": "2.0.16_@opentelemetry+semantic-conventions@1.43.0_redis@6.2.1",
-    "npm:smol-toml@^1.9.0": "1.9.0"
+    "npm:smol-toml@^1.9.0": "1.9.0",
+    "npm:valibot@^1.5.0": "1.5.0"
   },
   "npm": {
     "@ai-sdk/provider@3.0.8": {
@@ -1716,6 +1717,9 @@
     "util-deprecate@1.0.2": {
       "integrity": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw=="
     },
+    "valibot@1.5.0": {
+      "integrity": "sha512-nil6AkP2TChWL43Z5uJ6GTxX01CUA+g8LWUM+N/rB9NBbkUMaUsi9PUNzlUPgoKASgmx9f7eGOYpJ04/fSa6FQ=="
+    },
     "validate-npm-package-name@7.0.2": {
       "integrity": "sha512-hVDIBwsRruT73PbK7uP5ebUt+ezEtCmzZz3F59BSr2F6OVFnJ/6h8liuvdLrQ88Xmnk6/+xGGuq+pG9WwTuy3A=="
     },
@@ -1778,7 +1782,8 @@
     "packageJson": {
       "dependencies": [
         "npm:@opencode/plugin@^2.0.16",
-        "npm:smol-toml@^1.9.0"
+        "npm:smol-toml@^1.9.0",
+        "npm:valibot@^1.5.0"
       ]
     }
   }

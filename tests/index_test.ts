@@ -148,6 +148,74 @@ Deno.test("env HTTP headers require an explicit boolean opt-in", async () => {
   }
 });
 
+Deno.test("remote .mcp.json expansion requires its own boolean opt-in", async () => {
+  const root = fileURLToPath(
+    new URL("./fixtures/remote-env/", import.meta.url),
+  );
+  const variable = "ADAPTER_ENV_HEADER_PROBE";
+  const original = Deno.env.get(variable);
+  const originalWarn = console.warn;
+  const warnings: string[] = [];
+  async function definitions(options: Record<string, unknown>) {
+    const servers = new Map<string, unknown>();
+    const context = {
+      options,
+      location: { project: { directory: root } },
+      mcp: {
+        transform: (callback: (editor: Editor) => void) => {
+          callback({
+            get: (name: string) => servers.get(name),
+            set: (name: string, config: unknown) => servers.set(name, config),
+          } as unknown as Editor);
+          return Promise.resolve();
+        },
+      },
+    } as unknown as Context;
+    await plugin.setup(context);
+    return servers;
+  }
+  try {
+    console.warn = (...args: unknown[]) =>
+      warnings.push(args.map(String).join(" "));
+    Deno.env.set(variable, "dummy-value");
+    for (
+      const options of [
+        {},
+        { allowCodexEnvHttpHeaders: true },
+        { allowMcpJsonRemoteEnvExpansion: "true" },
+      ]
+    ) {
+      const disabled = await definitions(options);
+      assert.equal(disabled.has("dynamic"), false);
+      assert.deepEqual(disabled.get("static"), {
+        type: "remote",
+        url: "http://localhost:3001/mcp",
+      });
+    }
+    const fallback = await definitions({ sources: ["mcp-json", "codex"] });
+    assert.deepEqual(fallback.get("dynamic"), {
+      type: "remote",
+      url: "http://localhost:3001/fallback",
+    });
+    const enabled = await definitions({ allowMcpJsonRemoteEnvExpansion: true });
+    assert.deepEqual(enabled.get("dynamic"), {
+      type: "remote",
+      url: "http://localhost:3001/dummy-value",
+      headers: { Authorization: "Bearer dummy-value", "X-Static": "static" },
+    });
+    assert(
+      warnings.some((message) =>
+        message.includes("allowMcpJsonRemoteEnvExpansion")
+      ),
+    );
+    assert(warnings.every((message) => !message.includes("dummy-value")));
+  } finally {
+    console.warn = originalWarn;
+    if (original === undefined) Deno.env.delete(variable);
+    else Deno.env.set(variable, original);
+  }
+});
+
 type Context = Parameters<typeof plugin.setup>[0];
 type Editor = Parameters<Parameters<Context["mcp"]["transform"]>[0]>[0];
 

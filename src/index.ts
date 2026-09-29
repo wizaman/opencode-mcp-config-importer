@@ -1,8 +1,9 @@
 import { Plugin } from "@opencode/plugin";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { parseCodexToml } from "./codex_toml.ts";
-import { parseMcpJson } from "./mcp_json.ts";
+import { parseCodexToml } from "./codex/index.ts";
+import { parseMcpJson } from "./mcp_json/index.ts";
+import type { ParsedServer } from "./parse_result.ts";
 
 type Source = "mcp-json" | "codex";
 const sourceFiles: Record<Source, string> = {
@@ -38,10 +39,17 @@ export default Plugin.define({
         "[opencode-mcp-json-adapter] options.allowCodexEnvHttpHeaders must be a boolean; env_http_headers stays disabled",
       );
     }
-    const servers = new Map<
-      string,
-      ReturnType<typeof parseMcpJson>["servers"][number]["config"]
-    >();
+    const allowRemoteEnvExpansion =
+      ctx.options?.allowMcpJsonRemoteEnvExpansion === true;
+    if (
+      ctx.options?.allowMcpJsonRemoteEnvExpansion !== undefined &&
+      typeof ctx.options.allowMcpJsonRemoteEnvExpansion !== "boolean"
+    ) {
+      console.warn(
+        "[opencode-mcp-json-adapter] options.allowMcpJsonRemoteEnvExpansion must be a boolean; remote environment expansion stays disabled",
+      );
+    }
+    const servers = new Map<string, ParsedServer["config"]>();
     for (const source of selected) {
       const path = join(ctx.location.project.directory, sourceFiles[source]);
       let text: string;
@@ -56,7 +64,7 @@ export default Plugin.define({
       }
 
       const result = source === "mcp-json"
-        ? parseMcpJson(text)
+        ? parseMcpJson(text, { allowRemoteEnvExpansion })
         : parseCodexToml(text, { allowEnvHttpHeaders });
       for (const diagnostic of result.diagnostics) {
         console.warn(`[opencode-mcp-json-adapter] ${path}: ${diagnostic}`);

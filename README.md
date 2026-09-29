@@ -3,9 +3,26 @@
 
 対応する transport は stdio と Streamable HTTP です。`.mcp.json` の `type: "http"` と `type: "streamable-http"` は同じ Streamable HTTP として取り込みます。旧式の HTTP+SSE transport（`type: "sse"` など）は、MCP 2026-07-28 仕様で非推奨となったため意図的に取り込みません。Streamable HTTP 内で使われる SSE レスポンスとは別の話です。`type: "ws"` は MCP の標準 transport ではないため取り込みません。[^mcp-2026-07-28]
 
-`.mcp.json` のサーバー別 `timeout` は正の整数（ミリ秒）を受け付け、1000 未満なら 1000 に引き上げて OpenCode の `timeout.execution` に渡します。未指定なら OpenCode の既定値（通常12時間、グローバルの `mcp.timeout.execution` があればその値）を使い、0・負数・不正な型・小数の場合はサーバー定義をスキップします。Claude Code ではツール呼び出し向けですが、Copilot CLI ではツール発見にも適用されます。本プラグインでは発見用の `timeout.catalog` を変更せず、OpenCode の `execution` は MCP prompt・resource の取得にも適用されるため、どちらとも完全には一致しません。環境変数展開を含む形式ごとの差異は [PRD のタイムアウト・環境変数の節](docs/prd.md#タイムアウト)を参照してください。
+`.mcp.json` のサーバー別 `timeout` は正の整数（ミリ秒）を受け付け、1000 未満なら 1000 に引き上げて OpenCode の `timeout.execution` に渡します。未指定なら OpenCode の既定値（通常12時間、グローバルの `mcp.timeout.execution` があればその値）を使い、0・負数・不正な型・小数の場合はファイル全体を取り込みません。Claude Code ではツール呼び出し向けですが、Copilot CLI ではツール発見にも適用されます。本プラグインでは発見用の `timeout.catalog` を変更せず、OpenCode の `execution` は MCP prompt・resource の取得にも適用されるため、どちらとも完全には一致しません。環境変数展開を含む形式ごとの差異は [PRD のタイムアウト・環境変数の節](docs/prd.md#タイムアウト)を参照してください。
 
 stdio の `args`・`env` の値では `${VAR}` と `${VAR:-default}` を展開します。参照元は OpenCode プロセスの環境変数と同じサーバーの `env` で、同名なら `env` が優先です。未定義の `${VAR}` や循環参照があればサーバー定義を取り込まず、空文字列を明示するなら `${VAR:-}` を指定します。`command`・`cwd` は展開しません。子プロセスの環境変数の継承は OpenCode の仕様に従い、`env` に書かれていない変数を隠しません。展開した値が `args` から見える可能性があるため、そこに機密値を指定する場合は注意してください。
+
+### `.mcp.json` の remote 環境変数展開
+
+remote の `url`・`headers` の値に `${VAR}` や `${VAR:-default}` を使う場合、既定では**サーバー定義全体を取り込みません**。静的なヘッダーだけで接続することもありません。送信先と送信する値を利用者が確認したうえで展開を許可する場合のみ、プラグインの `options` に `"allowMcpJsonRemoteEnvExpansion": true` を指定してください。`true` 以外では有効にならず、Codex 用の `allowCodexEnvHttpHeaders` とは独立です。
+
+```jsonc
+{
+  "plugins": [{
+    "package": "./src",
+    "options": { "allowMcpJsonRemoteEnvExpansion": true }
+  }]
+}
+```
+
+例えば `.mcp.json` の `"headers": {"Authorization": "Bearer ${MCP_TOKEN}"}` は OpenCode プロセスの `MCP_TOKEN` をプラグイン読み込み時に展開します。remote の `env` は参照せず、未定義の変数や不正な展開結果があれば定義全体をスキップします。診断に値は出しません。**opt-in は秘密値の隔離や送信先の安全性を保証しません。** プロセス環境の値をどの URL に送るかは利用者の責任です。静的な `url`・`headers` は opt-in なしでも取り込めます。
+
+実際の送信を確認するには、ポート 3001・4097 を空けて `deno task smoke:mcp-json-remote-env` を実行します。固定 fixture・ダミー値を使った一時プロジェクトと受信用 MCP サーバーを起動し、opt-in 無効時と変数未設定時に dynamic サーバーが登録されないこと、有効時に展開後の URL とヘッダーが受信されることを確認します。既存の `.mcp.json` や現在の OpenCode セッションは変更せず、`deno test` と CI には含めません。
 
 [^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 

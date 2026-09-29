@@ -4,14 +4,45 @@
     "include": ["tests/"]
   },
   "tasks": {
-    "check": "deno check src tests scripts",
-    "test": "deno test --allow-read --allow-write --allow-env=ADAPTER_ENV_HEADER_PROBE,ADAPTER_BEARER_HEADER_PROBE",
-    "smoke:remote": "deno run -A scripts/smoke-remote.ts",
-    "smoke:codex-headers": "deno run -A scripts/smoke-codex-headers.ts",
-    "smoke:codex-env-headers": "deno run -A scripts/smoke-codex-env-headers.ts",
-    "remote:serve": "deno run -A --no-config --node-modules-dir=none npm:@modelcontextprotocol/server-everything/dist/index.js streamableHttp",
-    "oauth:serve": "deno run -A scripts/serve-oauth.ts",
-    "lint": "deno lint",
-    "fmt": "deno fmt --check src tests scripts package.json deno.json .mcp.json opencode.jsonc"
+    "check": {
+      "description": "ソース・テスト・スクリプトの型を検査する",
+      "command": "deno check src tests scripts"
+    },
+    "test": {
+      "description": "単体テストとプラグインテストを実行する",
+      "command": "deno test --allow-read --allow-write --allow-env=ADAPTER_ENV_HEADER_PROBE,ADAPTER_BEARER_HEADER_PROBE"
+    },
+    "smoke:remote": {
+      "description": "OpenCode V2 で stdio と HTTP の接続を確認する（ポート 3001・4097）",
+      "command": "deno run -A scripts/smoke-remote.ts"
+    },
+    "smoke:mcp-json-remote-env": {
+      "description": ".mcp.json の remote 変数展開とヘッダー送信を検証する（ポート 3001・4097）",
+      "command": "deno run -A scripts/smoke-mcp-json-remote-env.ts"
+    },
+    "smoke:codex-headers": {
+      "description": "Codex の静的 HTTP ヘッダーの送信を検証する（ポート 3001・4097）",
+      "command": "deno run -A scripts/smoke-codex-headers.ts"
+    },
+    "smoke:codex-env-headers": {
+      "description": "Codex の環境変数由来ヘッダーの送信を検証する（ポート 3001・4097）",
+      "command": "deno run -A scripts/smoke-codex-env-headers.ts"
+    },
+    "remote:serve": {
+      "description": "Everything の HTTP MCP サーバーを起動する（ポート 3001）",
+      "command": "deno run -A --no-config --node-modules-dir=none npm:@modelcontextprotocol/server-everything/dist/index.js streamableHttp"
+    },
+    "oauth:serve": {
+      "description": "OAuth 検証用の MCP サーバーを起動する（ポート 3232）",
+      "command": "deno run -A scripts/serve-oauth.ts"
+    },
+    "lint": {
+      "description": "Deno の lint を実行する",
+      "command": "deno lint"
+    },
+    "fmt": {
+      "description": "ソース・テスト・設定ファイルの整形を確認する",
+      "command": "deno fmt --check src tests scripts package.json deno.json .mcp.json opencode.jsonc"
+    }
   }
 }

@@ -73,7 +73,7 @@ buildが必要になった場合も、生成物は配布上必要な最小限に
 
 runtime dependenciesは最小化する。
 
-初期実装では、構造が単純ならZod / Valibot等のschema libraryを導入せず、必要最小限のvalidationを手書きする。
+`.mcp.json` と Codex MCP 設定の型検証には Valibot を使用する。ファイル単位で検証し、成功後に変数展開や opt-in などの方針を適用する。
 
 Codex の `.codex/config.toml` 対応には TOML パーサーとして npm package の `smol-toml` を使用する。OpenCode の実行環境でも使う依存関係として `package.json` に置き、Deno の設定と二重管理しない。パーサーの出力に対する MCP 定義の検証は、既存の JSON 入力と同様にプラグイン側で行う。
 
@@ -115,26 +115,3 @@ release taskは最低限、
 を再現可能にする。
 
 Git tagやGitHub Releaseの生成をrelease taskに含めるかは、初期実装では必須としない。
-
-## 想定構成
-
-```text
-package.json
-deno.lock
-src/
-  index.ts
-  mcp_json.ts
-  adapter.ts
-tests/
-  ...
-README.md
-LICENSE
-```
-
-Deno固有設定が必要になった場合のみ:
-
-```text
-deno.json
-```
-
-を追加する。

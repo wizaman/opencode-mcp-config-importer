@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { parseCodexToml } from "../src/codex_toml.ts";
+import { parseCodexToml } from "../src/codex/index.ts";
 
 Deno.test("converts Codex stdio and static HTTP headers, ignoring other settings", () => {
   const parsed = parseCodexToml(`
@@ -37,7 +37,7 @@ http_headers = { "X-Test-Source" = "codex" }
   });
 });
 
-Deno.test("skips bad servers and unsupported auth without leaking header values", () => {
+Deno.test("rejects invalid schema for the entire Codex file without leaking values", () => {
   const parsed = parseCodexToml(`
 [mcp_servers.good]
 command = "ok"
@@ -53,11 +53,8 @@ env_http_headers = { Authorization = "SECRET_ENV" }
 url = "https://example.com/mcp"
 http_headers = { Authorization = 123, Secret = "secret" }
 `);
-  assert.deepEqual(parsed.servers, [{
-    name: "good",
-    config: { type: "local", command: ["ok"] },
-  }]);
-  assert.equal(parsed.diagnostics.length, 3);
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, ["invalid Codex MCP configuration"]);
   assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
   assert.equal(parsed.diagnostics.join(" ").includes("SECRET_ENV"), false);
 });
@@ -70,7 +67,66 @@ Deno.test("rejects malformed TOML without showing input", () => {
     diagnostics: [],
   });
   assert.deepEqual(parseCodexToml("mcp_servers = []").diagnostics, [
-    "mcp_servers must be a table",
+    "invalid Codex MCP configuration",
+  ]);
+});
+
+Deno.test("Valibot rejects the entire Codex file on field type violations", () => {
+  const parsed = parseCodexToml(
+    `
+[mcp_servers.bad_enabled]
+enabled = "no"
+command = "server"
+[mcp_servers.bad_env]
+command = "server"
+env = ["secret"]
+[mcp_servers.bad_headers]
+url = "https://example.com/mcp"
+http_headers = ["secret"]
+[mcp_servers.bad_env_headers]
+url = "https://example.com/mcp"
+env_http_headers = ["secret"]
+[mcp_servers.good]
+command = "server"
+unknown = "ignored"
+`,
+    { allowEnvHttpHeaders: true },
+  );
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, ["invalid Codex MCP configuration"]);
+});
+
+Deno.test("skips unsupported Codex auth but retains other valid servers", () => {
+  const parsed = parseCodexToml(`
+[mcp_servers.good]
+command = "ok"
+[mcp_servers.auth]
+url = "https://example.com/mcp"
+auth = { token = "secret" }
+`);
+  assert.deepEqual(parsed.servers, [{
+    name: "good",
+    config: { type: "local", command: ["ok"] },
+  }]);
+  assert.deepEqual(parsed.diagnostics, [
+    "mcp_servers.auth.auth is not supported",
+  ]);
+});
+
+Deno.test("rejects mixed transports without importing the mixed server", () => {
+  const parsed = parseCodexToml(`
+[mcp_servers.good]
+command = "ok"
+[mcp_servers.mixed]
+command = "server"
+url = "https://example.com/mcp"
+`);
+  assert.deepEqual(parsed.servers, [{
+    name: "good",
+    config: { type: "local", command: ["ok"] },
+  }]);
+  assert.deepEqual(parsed.diagnostics, [
+    "mcp_servers.mixed: command and url cannot be combined",
   ]);
 });
 
