@@ -60,6 +60,79 @@ Deno.test("converts commands without optional fields and preserves platform path
   assert.deepEqual(parsed.diagnostics, []);
 });
 
+Deno.test("expands stdio args and env but not command or cwd", () => {
+  const parsed = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        local: {
+          command: "${SERVER_COMMAND}",
+          args: [
+            "${TOKEN}",
+            "${HOST_ONLY}",
+            "${MISSING:-}",
+            "${TOKEN:-fallback}",
+            "${EMPTY:-default}",
+          ],
+          env: { TOKEN: "local-token", CHAIN: "${TOKEN}/path", EMPTY: "" },
+          cwd: "${CHAIN}",
+        },
+      },
+    }),
+    {
+      getEnv: (name) =>
+        new Map([
+          ["TOKEN", "host-token"],
+          ["HOST_ONLY", "host-value"],
+        ]).get(name),
+    },
+  );
+  assert.deepEqual(parsed, {
+    servers: [{
+      name: "local",
+      config: {
+        type: "local",
+        command: [
+          "${SERVER_COMMAND}",
+          "local-token",
+          "host-value",
+          "",
+          "local-token",
+          "default",
+        ],
+        environment: {
+          TOKEN: "local-token",
+          CHAIN: "local-token/path",
+          EMPTY: "",
+        },
+        cwd: "${CHAIN}",
+      },
+    }],
+    diagnostics: [],
+  });
+});
+
+Deno.test("rejects unresolved or cyclic stdio references without exposing values", () => {
+  const parsed = parseMcpJson(
+    JSON.stringify({
+      mcpServers: {
+        missing: { command: "server", args: ["${UNSET}"] },
+        missingEnv: { command: "server", env: { TOKEN: "${UNSET}" } },
+        badSyntax: { command: "server", args: ["${UNSET?}"] },
+        cycle: { command: "server", env: { A: "${B}", B: "${A}" } },
+        selfFallback: { command: "server", env: { A: "${A:-fallback}" } },
+        valid: { command: "server", args: ["$UNSET", "${UNSET:-}"] },
+      },
+    }),
+    { getEnv: () => undefined },
+  );
+  assert.deepEqual(parsed.servers, [{
+    name: "valid",
+    config: { type: "local", command: ["server", "$UNSET", ""] },
+  }]);
+  assert.equal(parsed.diagnostics.length, 5);
+  assert.equal(parsed.diagnostics.join(" ").includes("UNSET"), false);
+});
+
 Deno.test("rejects malformed JSON without revealing contents", () => {
   const parsed = parseMcpJson('{"mcpServers":{"key":"secret"');
   assert.deepEqual(parsed.servers, []);

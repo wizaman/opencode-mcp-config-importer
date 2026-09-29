@@ -5,6 +5,8 @@
 
 `.mcp.json` のサーバー別 `timeout` は正の整数（ミリ秒）を受け付け、1000 未満なら 1000 に引き上げて OpenCode の `timeout.execution` に渡します。未指定なら OpenCode の既定値（通常12時間、グローバルの `mcp.timeout.execution` があればその値）を使い、0・負数・不正な型・小数の場合はサーバー定義をスキップします。Claude Code ではツール呼び出し向けですが、Copilot CLI ではツール発見にも適用されます。本プラグインでは発見用の `timeout.catalog` を変更せず、OpenCode の `execution` は MCP prompt・resource の取得にも適用されるため、どちらとも完全には一致しません。環境変数展開を含む形式ごとの差異は [PRD のタイムアウト・環境変数の節](docs/prd.md#タイムアウト)を参照してください。
 
+stdio の `args`・`env` の値では `${VAR}` と `${VAR:-default}` を展開します。参照元は OpenCode プロセスの環境変数と同じサーバーの `env` で、同名なら `env` が優先です。未定義の `${VAR}` や循環参照があればサーバー定義を取り込まず、空文字列を明示するなら `${VAR:-}` を指定します。`command`・`cwd` は展開しません。子プロセスの環境変数の継承は OpenCode の仕様に従い、`env` に書かれていない変数を隠しません。展開した値が `args` から見える可能性があるため、そこに機密値を指定する場合は注意してください。
+
 [^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 
 ## Codex 設定の取り込み
