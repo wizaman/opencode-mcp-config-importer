@@ -401,7 +401,7 @@ Deno.test("accepts the Streamable HTTP alias and maps timeouts for local and rem
   });
 });
 
-Deno.test("skips WebSocket and malformed timeouts without dropping valid servers", () => {
+Deno.test("rejects the entire .mcp.json file for unsupported types or malformed timeouts", () => {
   const parsed = parseMcpJson(JSON.stringify({
     mcpServers: {
       websocket: { type: "ws", url: "wss://example.com/mcp" },
@@ -417,22 +417,12 @@ Deno.test("skips WebSocket and malformed timeouts without dropping valid servers
       valid: { type: "http", url: "https://example.com/mcp", timeout: 1000 },
     },
   }));
-  assert.deepEqual(parsed.servers, [{
-    name: "valid",
-    config: {
-      type: "remote",
-      url: "https://example.com/mcp",
-      timeout: { execution: 1000 },
-    },
-  }]);
-  assert.equal(parsed.diagnostics.length, 6);
-  assert(
-    parsed.diagnostics.some((message) => message.includes("unsupported type")),
-  );
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, ["invalid .mcp.json configuration"]);
   assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
 });
 
-Deno.test("skips invalid remote definitions without logging header values", () => {
+Deno.test("rejects the whole .mcp.json file for invalid header types", () => {
   const parsed = parseMcpJson(JSON.stringify({
     mcpServers: {
       good: { type: "http", url: "https://example.com/mcp" },
@@ -445,15 +435,12 @@ Deno.test("skips invalid remote definitions without logging header values", () =
       },
     },
   }));
-  assert.deepEqual(parsed.servers, [{
-    name: "good",
-    config: { type: "remote", url: "https://example.com/mcp" },
-  }]);
-  assert.equal(parsed.diagnostics.length, 3);
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, ["invalid .mcp.json configuration"]);
   assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
 });
 
-Deno.test("skips invalid or unsupported servers but keeps valid ones", () => {
+Deno.test("rejects the whole .mcp.json file for invalid server fields", () => {
   const parsed = parseMcpJson(JSON.stringify({
     mcpServers: {
       valid: { command: "server", env: { TOKEN: "secret" } },
@@ -462,17 +449,17 @@ Deno.test("skips invalid or unsupported servers but keeps valid ones", () => {
       missing: { args: ["--help"] },
     },
   }));
-  assert.deepEqual(parsed.servers.map(({ name }) => name), ["valid"]);
-  assert.equal(parsed.diagnostics.length, 3);
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, ["invalid .mcp.json configuration"]);
   assert.equal(parsed.diagnostics.join(" ").includes("secret"), false);
 });
 
 Deno.test("rejects invalid root and argument shapes", () => {
   assert.deepEqual(parseMcpJson("[]").diagnostics, [
-    "mcpServers must be an object",
+    "invalid .mcp.json configuration",
   ]);
   assert.deepEqual(parseMcpJson('{"mcpServers":[]}').diagnostics, [
-    "mcpServers must be an object",
+    "invalid .mcp.json configuration",
   ]);
   assert.deepEqual(
     parseMcpJson('{"mcpServers":{"bad":{"command":"cmd","args":[1]}}}')
@@ -481,7 +468,7 @@ Deno.test("rejects invalid root and argument shapes", () => {
   );
 });
 
-Deno.test("Valibot rejects arrays where .mcp.json requires maps", () => {
+Deno.test("Valibot rejects the entire .mcp.json file for invalid maps", () => {
   const parsed = parseMcpJson(JSON.stringify({
     mcpServers: {
       badEnv: { command: "server", env: ["secret"] },
@@ -493,12 +480,22 @@ Deno.test("Valibot rejects arrays where .mcp.json requires maps", () => {
       valid: { type: "http", url: "https://example.com/mcp", extra: "ignored" },
     },
   }));
+  assert.deepEqual(parsed.servers, []);
+  assert.deepEqual(parsed.diagnostics, ["invalid .mcp.json configuration"]);
+});
+
+Deno.test("ignores unsupported extra fields but rejects stdio URLs", () => {
+  const parsed = parseMcpJson(JSON.stringify({
+    mcpServers: {
+      valid: { command: "server", tools: { disabled: [123] } },
+      mixed: { command: "server", url: "https://example.com/mcp" },
+    },
+  }));
   assert.deepEqual(parsed.servers, [{
     name: "valid",
-    config: { type: "remote", url: "https://example.com/mcp" },
+    config: { type: "local", command: ["server"] },
   }]);
   assert.deepEqual(parsed.diagnostics, [
-    "mcpServers.badEnv.env must contain only string values",
-    "mcpServers.badHeaders.headers must contain only string values",
+    "mcpServers.mixed: remote servers are not yet supported",
   ]);
 });

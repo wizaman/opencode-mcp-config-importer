@@ -73,7 +73,7 @@ buildが必要になった場合も、生成物は配布上必要な最小限に
 
 runtime dependenciesは最小化する。
 
-初期実装では、構造が単純ならZod / Valibot等のschema libraryを導入せず、必要最小限のvalidationを手書きする。
+`.mcp.json` と Codex MCP 設定の型検証には Valibot を使用する。ファイル単位で検証し、成功後に変数展開や opt-in などの方針を適用する。
 
 Codex の `.codex/config.toml` 対応には TOML パーサーとして npm package の `smol-toml` を使用する。OpenCode の実行環境でも使う依存関係として `package.json` に置き、Deno の設定と二重管理しない。パーサーの出力に対する MCP 定義の検証は、既存の JSON 入力と同様にプラグイン側で行う。
 

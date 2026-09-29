@@ -1,35 +1,16 @@
+import type { Mcp } from "@opencode/plugin";
 import * as v from "valibot";
 import type { ParseResult } from "../parse_result.ts";
-import { HttpSchema, RootSchema, StdioSchema } from "./schema.ts";
-import type { ServerIssue } from "./schema.ts";
+import { RootSchema } from "./schema.ts";
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+type Server = v.InferOutput<typeof RootSchema>["mcpServers"][string];
+type HttpServer = Extract<Server, { type: "http" | "streamable-http" }>;
+type StdioServer = Extract<Server, { command: string }>;
+type Conversion = Mcp.ServerConfig | { diagnostic: string };
 
-function invalidField(
-  name: string,
-  issues: readonly ServerIssue[],
-): string {
-  const key = issues[0]?.path?.[0]?.key;
-  switch (key) {
-    case "timeout":
-      return `mcpServers.${name}.timeout must be a positive integer in milliseconds`;
-    case "url":
-      return `mcpServers.${name}.url must be an absolute HTTP(S) URL`;
-    case "headers":
-      return `mcpServers.${name}.headers must contain only string values`;
-    case "command":
-      return `mcpServers.${name}.command must be a non-empty string`;
-    case "args":
-      return `mcpServers.${name}.args must be an array of strings`;
-    case "env":
-      return `mcpServers.${name}.env must contain only string values`;
-    case "cwd":
-      return `mcpServers.${name}.cwd must be a non-empty string`;
-    default:
-      return `mcpServers.${name}: invalid server definition`;
-  }
+interface McpJsonOptions {
+  getEnv?: (name: string) => string | undefined;
+  allowRemoteEnvExpansion?: boolean;
 }
 
 function expandValue(
@@ -113,12 +94,103 @@ function expandStdio(
   return { args, env };
 }
 
+function convertHttp(
+  name: string,
+  value: HttpServer,
+  getEnv: (name: string) => string | undefined,
+  allowRemoteEnvExpansion: boolean,
+): Conversion {
+  const { url: rawUrl, headers, timeout: milliseconds } = value;
+  const timeout = milliseconds === undefined
+    ? {}
+    : { timeout: { execution: Math.max(milliseconds, 1000) } };
+  if (
+    !allowRemoteEnvExpansion &&
+    (rawUrl.includes("${") ||
+      Object.values(headers ?? {}).some((header) => header.includes("${")))
+  ) {
+    return {
+      diagnostic:
+        `mcpServers.${name}: remote environment expansion requires allowMcpJsonRemoteEnvExpansion`,
+    };
+  }
+  const url = allowRemoteEnvExpansion ? expandValue(rawUrl, getEnv) : rawUrl;
+  if (url === undefined) {
+    return {
+      diagnostic:
+        `mcpServers.${name}: invalid or unresolved remote environment reference`,
+    };
+  }
+  if (!isHttpUrl(url)) {
+    return {
+      diagnostic: `mcpServers.${name}.url must be an absolute HTTP(S) URL`,
+    };
+  }
+  let expandedHeaders: Record<string, string> | undefined;
+  if (headers !== undefined && allowRemoteEnvExpansion) {
+    expandedHeaders = {};
+    for (const [key, header] of Object.entries(headers)) {
+      const resolved = expandValue(header, getEnv);
+      if (resolved === undefined) {
+        return {
+          diagnostic: `mcpServers.${name}: invalid or unresolved remote header`,
+        };
+      }
+      try {
+        new Headers().set(key, resolved);
+      } catch {
+        return {
+          diagnostic: `mcpServers.${name}: invalid or unresolved remote header`,
+        };
+      }
+      Object.defineProperty(expandedHeaders, key, {
+        value: resolved,
+        enumerable: true,
+        writable: true,
+      });
+    }
+  }
+  return {
+    type: "remote",
+    url,
+    ...(headers === undefined ? {} : { headers: expandedHeaders ?? headers }),
+    ...timeout,
+  };
+}
+
+function convertStdio(
+  name: string,
+  value: StdioServer,
+  getEnv: (name: string) => string | undefined,
+): Conversion {
+  if ("url" in value && value.url !== undefined) {
+    return {
+      diagnostic: `mcpServers.${name}: remote servers are not yet supported`,
+    };
+  }
+  const { command, args, env, cwd, timeout: milliseconds } = value;
+  const timeout = milliseconds === undefined
+    ? {}
+    : { timeout: { execution: Math.max(milliseconds, 1000) } };
+  const expanded = expandStdio({ args: args ?? [], env: env ?? {} }, getEnv);
+  if (!expanded) {
+    return {
+      diagnostic:
+        `mcpServers.${name}: invalid or unresolved environment reference`,
+    };
+  }
+  return {
+    type: "local",
+    command: [command, ...expanded.args],
+    ...(env === undefined ? {} : { environment: expanded.env }),
+    ...(cwd === undefined ? {} : { cwd }),
+    ...timeout,
+  };
+}
+
 export function parseMcpJson(
   text: string,
-  options: {
-    getEnv?: (name: string) => string | undefined;
-    allowRemoteEnvExpansion?: boolean;
-  } = {},
+  options: McpJsonOptions = {},
 ): ParseResult {
   const result: ParseResult = { servers: [], diagnostics: [] };
   let input: unknown;
@@ -132,139 +204,24 @@ export function parseMcpJson(
 
   const root = v.safeParse(RootSchema, input);
   if (!root.success) {
-    result.diagnostics.push("mcpServers must be an object");
+    result.diagnostics.push("invalid .mcp.json configuration");
     return result;
   }
 
+  const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
   for (const [name, value] of Object.entries(root.output.mcpServers)) {
-    if (!isObject(value)) {
-      result.diagnostics.push(`mcpServers.${name} must be an object`);
-      continue;
-    }
-    if (
-      value.type !== undefined && value.type !== "stdio" &&
-      value.type !== "http" && value.type !== "streamable-http"
-    ) {
-      result.diagnostics.push(`mcpServers.${name}: unsupported type`);
-      continue;
-    }
-    if (value.type === "http" || value.type === "streamable-http") {
-      const parsed = v.safeParse(HttpSchema, value);
-      if (!parsed.success) {
-        result.diagnostics.push(invalidField(name, parsed.issues));
-        continue;
-      }
-      const { url: rawUrl, headers, timeout: milliseconds } = parsed.output;
-      const timeout = milliseconds === undefined
-        ? {}
-        : { timeout: { execution: Math.max(milliseconds, 1000) } };
-      if (
-        options.allowRemoteEnvExpansion !== true &&
-        (rawUrl.includes("${") ||
-          Object.values(headers ?? {}).some((header) => header.includes("${")))
-      ) {
-        result.diagnostics.push(
-          `mcpServers.${name}: remote environment expansion requires allowMcpJsonRemoteEnvExpansion`,
-        );
-        continue;
-      }
-      const getEnv = options.getEnv ?? ((name: string) => process.env[name]);
-      const url = options.allowRemoteEnvExpansion === true
-        ? expandValue(rawUrl, getEnv)
-        : rawUrl;
-      if (url === undefined) {
-        result.diagnostics.push(
-          `mcpServers.${name}: invalid or unresolved remote environment reference`,
-        );
-        continue;
-      }
-      if (!isHttpUrl(url)) {
-        result.diagnostics.push(
-          `mcpServers.${name}.url must be an absolute HTTP(S) URL`,
-        );
-        continue;
-      }
-      let expandedHeaders: Record<string, string> | undefined;
-      if (headers !== undefined && options.allowRemoteEnvExpansion === true) {
-        expandedHeaders = {};
-        let invalid = false;
-        for (const [key, header] of Object.entries(headers)) {
-          const resolved = expandValue(header, getEnv);
-          if (resolved === undefined) {
-            invalid = true;
-            break;
-          }
-          try {
-            new Headers().set(key, resolved);
-          } catch {
-            invalid = true;
-            break;
-          }
-          Object.defineProperty(expandedHeaders, key, {
-            value: resolved,
-            enumerable: true,
-            writable: true,
-          });
-        }
-        if (invalid) {
-          result.diagnostics.push(
-            `mcpServers.${name}: invalid or unresolved remote header`,
-          );
-          continue;
-        }
-      }
-      result.servers.push({
+    // A validated stdio entry always has command; HTTP entries omit it.
+    const conversion = "command" in value
+      ? convertStdio(name, value, getEnv)
+      : convertHttp(
         name,
-        config: {
-          type: "remote",
-          url,
-          ...(headers === undefined
-            ? {}
-            : { headers: expandedHeaders ?? headers }),
-          ...timeout,
-        },
-      });
-      continue;
-    }
-    if (value.url !== undefined) {
-      result.diagnostics.push(
-        `mcpServers.${name}: remote servers are not yet supported`,
+        value,
+        getEnv,
+        options.allowRemoteEnvExpansion === true,
       );
-      continue;
-    }
-    const parsed = v.safeParse(StdioSchema, value);
-    if (!parsed.success) {
-      result.diagnostics.push(invalidField(name, parsed.issues));
-      continue;
-    }
-    const { command, args, env, cwd, timeout: milliseconds } = parsed.output;
-    const timeout = milliseconds === undefined
-      ? {}
-      : { timeout: { execution: Math.max(milliseconds, 1000) } };
-
-    const expanded = expandStdio(
-      {
-        args: args ?? [],
-        env: env ?? {},
-      },
-      options.getEnv ?? ((name) => process.env[name]),
-    );
-    if (!expanded) {
-      result.diagnostics.push(
-        `mcpServers.${name}: invalid or unresolved environment reference`,
-      );
-      continue;
-    }
-    result.servers.push({
-      name,
-      config: {
-        type: "local",
-        command: [command, ...expanded.args],
-        ...(env === undefined ? {} : { environment: expanded.env }),
-        ...(cwd === undefined ? {} : { cwd }),
-        ...timeout,
-      },
-    });
+    if ("diagnostic" in conversion) {
+      result.diagnostics.push(conversion.diagnostic);
+    } else result.servers.push({ name, config: conversion });
   }
 
   return result;

@@ -82,8 +82,8 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 | フィールド | 入力形式・対応方針 |
 | --- | --- |
 | `mcpServers` | 必須のオブジェクト。キーをサーバー名、値を定義オブジェクトとして扱う。欠落・型違いはファイル全体を解析せず診断する。空オブジェクトは可。 |
-| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` または `"streamable-http"` は Streamable HTTP。`"sse"` と `"ws"` は後述のとおり非対応。Copilot CLI 専用の `"local"` も受け付けず、それ以外の値と同じくサーバーごとスキップする。 |
-| `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通。正の安全な整数（ミリ秒）を受け付け、現状は 1000 未満を 1000 に引き上げて OpenCode の `timeout.execution` に渡す。未指定なら OpenCode の既定値またはグローバル設定を使う。0・負数・型違い・整数以外はサーバーをスキップして診断する。クライアント間の意味の違いは「タイムアウト」で説明する。 |
+| `mcpServers.<name>.type` | 省略または `"stdio"` は stdio、`"http"` または `"streamable-http"` は Streamable HTTP。`"sse"`・`"ws"`・`"local"` を含むそれ以外の値は型検証でファイル全体を拒否する。 |
+| `mcpServers.<name>.timeout` | stdio・Streamable HTTP 共通。正の安全な整数（ミリ秒）を受け付け、現状は 1000 未満を 1000 に引き上げて OpenCode の `timeout.execution` に渡す。未指定なら OpenCode の既定値またはグローバル設定を使う。0・負数・型違い・整数以外はファイル全体を拒否する。クライアント間の意味の違いは「タイムアウト」で説明する。 |
 | 上記・下記以外のフィールド | 現状は検証せず無視する。別のクライアント固有の項目を推測・変換しない。無視した制約・認証の挙動までは再現できない。Copilot CLI 固有の既知項目は後述する。 |
 
 #### stdio（`type` 省略または `"stdio"`）
@@ -116,7 +116,7 @@ opt-in は送信先や値の安全性をプラグインが保証する仕組み�
 
 #### 旧式 HTTP+SSE（`type: "sse"`）
 
-例えば次の定義は、サーバーごとスキップして診断する。
+例えば次の定義を含むファイルは、型検証で全体を拒否する。
 
 ```json
 {
@@ -130,7 +130,7 @@ SSE 用のフィールドは変換・検証しない。旧式の HTTP+SSE transp
 
 #### WebSocket（`type: "ws"`）
 
-WebSocket は MCP の標準 transport として定義されていないため、サーバーごとスキップして診断する。WebSocket 用の `wss://` URL やその他のフィールドは変換・検証しない。
+WebSocket は MCP の標準 transport として定義されていないため、`type: "ws"` を含むファイルは型検証で全体を拒否する。WebSocket 用の `wss://` URL やその他のフィールドは変換しない。
 
 #### タイムアウト
 
@@ -176,7 +176,7 @@ Copilot CLI に寄せて `catalog` にも適用するとツール発見の時間
 | remote の `oauthClientId` / `oauthScopes` / `oauthPublicClient` / `oauthGrantType` | Copilot CLI 固有の OAuth クライアント設定。 | 現状は無視して remote サーバーを登録する。Copilot CLI の OAuth 設定は再現せず、必要な認証は OpenCode 側の動作に委ねる。 |
 | `oidc` | stdio の環境変数または remote の Bearer ヘッダーへ OIDC トークンを渡す指定。 | 現状は無視してサーバーを登録する。Copilot CLI のトークン注入は再現しない。 |
 
-独自項目は認識したうえで変換・検証せず、**存在だけを理由にサーバー定義全体をスキップしない**。これは「Claude Code と同じ動作」や「Copilot CLI の全項目との互換性」を意味しない。`tools` の制限や認証方式は取り込まれず、OpenCode 側では利用可能なツールや認証の挙動が変わり得る。制限を維持する必要があれば OpenCode ネイティブの権限設定等を別途使用する。この方針は、既にサーバー単位のスキップ対象としている不正な基本項目や非対応の `type` には適用しない。
+独自項目は認識したうえで変換・検証せず、**存在だけを理由にサーバー定義全体をスキップしない**。これは「Claude Code と同じ動作」や「Copilot CLI の全項目との互換性」を意味しない。`tools` の制限や認証方式は取り込まれず、OpenCode 側では利用可能なツールや認証の挙動が変わり得る。制限を維持する必要があれば OpenCode ネイティブの権限設定等を別途使用する。この方針は、ファイル全体を拒否する不正な基本項目や非対応の `type` には適用しない。
 
 #### 参考仕様：Agent Plugins v1 の `mcp.json`（入力対象外）
 
@@ -213,7 +213,7 @@ Codex のサーバー定義には `type` フィールドがない。`url` があ
 | フィールド | 入力形式・現行の対応方針 |
 | --- | --- |
 | `mcp_servers.<name>` | トップレベルのテーブル。キーをサーバー名として扱う。`mcp_servers` がなければ何も追加しない。テーブル以外は診断する。 |
-| `enabled` | 真偽値。`false` なら取り込まない。省略・`true` なら以下を検証する。型違いはサーバーごとスキップする。 |
+| `enabled` | 真偽値。`false` なら取り込まない。省略・`true` なら以下を検証する。型違いはファイル全体を拒否する。 |
 | `startup_timeout_sec` / `startup_timeout_ms` / `tool_timeout_sec` | Codex の秒単位の起動・ツール実行タイムアウトと、起動タイムアウトのミリ秒単位の別名。現状は無視する。OpenCode のタイムアウトとの意味・単位の対応を調べてから変換可否を判断する。 |
 | `required` | 接続失敗時の起動失敗指定。現状は無視する。OpenCode に同等の動作を保証できるか要検討。 |
 | `enabled_tools` / `disabled_tools` | ツールの許可・拒否リスト。現状は**無視してサーバーを登録する**。Codex で制限していたツールが OpenCode では見える可能性があり、優先して安全な扱いを決める必要がある。 |
@@ -224,7 +224,7 @@ Codex のサーバー定義には `type` フィールドがない。`url` があ
 
 | フィールド | 入力形式・現行の対応方針 |
 | --- | --- |
-| `command` | 必須の非空文字列。OpenCode の local `command` 配列の先頭へ変換する。未指定・不正ならサーバーをスキップする。 |
+| `command` | 必須の非空文字列。OpenCode の local `command` 配列の先頭へ変換する。未指定・不正ならファイル全体を拒否する。 |
 | `args` | 任意の文字列配列。`command` の後ろへ追加する。 |
 | `env` | 任意の文字列値のマップ。OpenCode の local `environment` へ変換する。 |
 | `cwd` | 任意の非空文字列。OpenCode の local `cwd` へ渡す。 |
@@ -304,7 +304,7 @@ JSONが不正な場合は対象ファイルと理由が分かる診断を出す�
 
 未知のフィールドは可能な限り無視する。
 
-対応できないserver定義があっても、他の正常なserverまで無効化しない。
+既知の構造・フィールドに型違反があれば、入力ファイル全体を取り込まない。型検証後の opt-in 不足・変数展開失敗・未対応の認証などはサーバー単位でスキップし、他の正常なサーバーを維持する。
 
 secretになり得る値をログへ出力しない。
 
@@ -345,7 +345,7 @@ OpenCode V2 Pluginとしてnpm packageで配布する。
 - remote + headers
 - 複数server
 - malformed JSON
-- 一部serverのみ不正
+- 一部serverのみ型違反の場合のファイル全体の拒否
 - 未知field
 - OpenCodeネイティブ設定との名前衝突
 - Windows向けcommand/path
@@ -353,7 +353,7 @@ OpenCode V2 Pluginとしてnpm packageで配布する。
 
 変換処理はOpenCode本体を起動せずunit testできるよう分離する。
 
-Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ不正なサーバー定義をテストする。静的な `http_headers` と opt-in の `env_http_headers` / `bearer_token_env_var` は OpenCode 経由の受信確認も行う。環境変数由来のヘッダーは無効時のサーバー単位のスキップ、有効時の未設定・空白・静的ヘッダーとの衝突をテストする。
+Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ型違反のサーバー定義をテストする。静的な `http_headers` と opt-in の `env_http_headers` / `bearer_token_env_var` は OpenCode 経由の受信確認も行う。環境変数由来のヘッダーは無効時のサーバー単位のスキップ、有効時の未設定・空白・静的ヘッダーとの衝突をテストする。
 
 ## セキュリティ
 

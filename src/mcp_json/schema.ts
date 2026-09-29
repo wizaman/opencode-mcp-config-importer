@@ -10,12 +10,6 @@ const StringRecordSchema = v.intersect([
   ObjectRecordSchema,
   v.record(v.string(), v.string()),
 ]);
-export const RootSchema = v.object({
-  mcpServers: v.intersect([
-    ObjectRecordSchema,
-    v.record(v.string(), v.unknown()),
-  ]),
-});
 const CommonEntries = {
   timeout: v.optional(v.pipe(
     v.number(),
@@ -23,7 +17,7 @@ const CommonEntries = {
   )),
 };
 const NonBlankString = v.pipe(v.string(), v.check((value) => !!value.trim()));
-export const StdioSchema = v.object({
+const StdioSchema = v.looseObject({
   ...CommonEntries,
   type: v.optional(v.literal("stdio")),
   command: NonBlankString,
@@ -31,13 +25,16 @@ export const StdioSchema = v.object({
   env: v.optional(StringRecordSchema),
   cwd: v.optional(NonBlankString),
 });
-export const HttpSchema = v.object({
+const HttpSchema = v.object({
   ...CommonEntries,
   type: v.picklist(["http", "streamable-http"]),
   url: v.string(),
   headers: v.optional(StringRecordSchema),
 });
 
-export type ServerIssue =
-  | v.InferIssue<typeof StdioSchema>
-  | v.InferIssue<typeof HttpSchema>;
+export const RootSchema = v.object({
+  mcpServers: v.intersect([
+    ObjectRecordSchema,
+    v.record(v.string(), v.union([StdioSchema, HttpSchema])),
+  ]),
+});

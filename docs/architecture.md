@@ -2,7 +2,7 @@
 title: アーキテクチャ
 description: プロジェクトルートの .mcp.json の取り込み構成と、Codex 設定の追加取り込みに向けた設計方針を定義する。
 date: 2026-09-28
-updated: 2026-09-28
+updated: 2026-09-30
 ---
 
 ## 位置づけ
@@ -17,8 +17,9 @@ updated: 2026-09-28
 flowchart LR
     A[プロジェクトルートの .mcp.json] --> B[JSON解析]
     X[プロジェクトルートの .codex/config.toml] --> Y[TOML解析・opt-in]
-    B --> C[サーバー単位の検証と変換]
-    Y --> C
+    B --> V[ファイル単位の型検証]
+    Y --> V
+    V --> C[サーバー単位の方針判定と変換]
     C --> D[OpenCode V2 MCP transform]
     N[既存のOpenCode MCP設定] --> D
     D --> E[MCP registry]
@@ -33,10 +34,10 @@ flowchart LR
 | --- | --- |
 | `src/index.ts` | Plugin ID `opencode-mcp-json-adapter` を公開し、読み込み結果を MCP transform に登録する。 |
 | `src/parse_result.ts` | 両入力元のパーサーが返すサーバー定義と診断の型を共有する。 |
-| `src/mcp_json/schema.ts` | `.mcp.json` 固有の Valibot スキーマと、そのスキーマから推論する issue 型を定義する。 |
-| `src/mcp_json/index.ts` | JSON解析、サーバー単位の型検証、stdio / HTTP 定義の変換を行う。展開や opt-in の判定は型検証後に行い、OpenCode を起動せず単体テストできる。 |
-| `src/codex/schema.ts` | `.codex/config.toml` 固有の Valibot スキーマと、そのスキーマから推論する issue 型を定義する。 |
-| `src/codex/index.ts` | TOML解析、`mcp_servers` 以下のサーバー単位の検証、stdio / HTTP 定義の変換を行う。 |
+| `src/mcp_json/schema.ts` | `.mcp.json` の Valibot スキーマを定義する。 |
+| `src/mcp_json/index.ts` | JSON解析、ファイル単位の型検証、stdio / HTTP 定義の変換を行う。展開や opt-in の判定は型検証後に行う。 |
+| `src/codex/schema.ts` | `.codex/config.toml` の MCP 設定用 Valibot スキーマを定義する。 |
+| `src/codex/index.ts` | TOML解析、ファイル単位の型検証、サーバー単位の方針判定と変換を行う。 |
 | OpenCode | MCP registry の構築、接続のライフサイクル、実際のサーバー起動・通信を担う。 |
 
 ファイルの読み込みと入力元の優先順位は `src/index.ts`、内容の解析・変換は入力元ごとのパーサーが担当する。入力元ごとのスキーマは各ディレクトリに閉じ、共通の結果型だけをルートで共有する。独立した内部表現は設けない。
@@ -72,7 +73,7 @@ flowchart LR
 
 `options.sources` の既定値は `["mcp-json"]`。指定された入力元を順に解析・検証し、同名サーバーがあれば最初の有効な定義を保持する。最後に MCP transform で OpenCode ネイティブの同名定義があれば追加しない。衝突時は通常警告せず、読めないファイルや不正な定義の診断には秘密値を含めない。両方の入力元がなくても正常な状態とする。
 
-Codex の TOML 解析には `smol-toml` を使用し、型検証には `src/codex/schema.ts` の Valibot スキーマを使用する。`src/codex/index.ts` はサーバー単位で検証し、stdio の `command` / `args` / `env` / `cwd` を local 定義へ、remote の `url` / `http_headers` を remote 定義へ変換する。両方の入力元を `src/index.ts` で順に読み込み、同じ MCP transform で登録する。独立した内部表現は設けない。未対応の認証設定を持つサーバーは取り込まない。
+Codex の TOML 解析には `smol-toml` を使用し、型検証には `src/codex/schema.ts` の Valibot スキーマを使用する。いずれの入力元も、対応する定義の型違反があればそのファイルからは何も取り込まない。成功後、stdio の `command` / `args` / `env` / `cwd` を local 定義へ、remote の `url` / `http_headers` を remote 定義へ変換する。両方の入力元を `src/index.ts` で順に読み込み、同じ MCP transform で登録する。独立した内部表現は設けない。未対応の認証設定を持つサーバーは取り込まない。
 
 `env_http_headers` と `bearer_token_env_var` は明示オプション `allowCodexEnvHttpHeaders: true` でのみ取り込む。無効時は該当サーバーを定義ごとスキップし、先勝ちの優先順位では次の有効な定義が採用可能となる。有効時はプラグインが OpenCode プロセスの環境変数を起動時に読む。`env_http_headers` は空白だけの値を追加せず、値があれば大文字・小文字を区別せず静的ヘッダーに優先させる。Bearer は値から `Authorization: Bearer <値>` を生成し、同名の静的・環境変数由来のヘッダーより優先する。Bearer の値が未設定・空白・不正ならサーバーを登録しない。プラグインの MCP transform に渡した `{env:NAME}` は OpenCode V2.0.18 では展開されないため、値を直接登録する。この値が `/api/config` や `/api/mcp` に現れないことはダミー値で検証するが、秘密値隔離の保証とはみなさない。
 

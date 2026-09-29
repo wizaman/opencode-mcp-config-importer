@@ -6,11 +6,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 // Valibot's record also accepts arrays; TOML tables must be objects.
 export const TableSchema = v.custom<Record<string, unknown>>(isObject);
-const StringTableSchema = v.record(v.string(), v.string());
-export const RootSchema = v.object({
-  mcp_servers: v.optional(v.record(v.string(), v.unknown())),
-});
-export const EnabledSchema = v.object({ enabled: v.optional(v.boolean()) });
+const StringTableSchema = v.pipe(
+  TableSchema,
+  v.transform((value) => ({ ...value })),
+  v.record(v.string(), v.string()),
+);
 const NonBlankString = v.pipe(v.string(), v.check((value) => !!value.trim()));
 const HttpUrl = v.pipe(
   v.string(),
@@ -23,19 +23,54 @@ const HttpUrl = v.pipe(
   }),
 );
 
-export const LocalSchema = v.object({
-  command: NonBlankString,
-  args: v.optional(v.array(v.string())),
-  env: v.optional(StringTableSchema),
-  cwd: v.optional(NonBlankString),
-});
-export const RemoteSchema = v.object({
-  url: HttpUrl,
-  http_headers: v.optional(StringTableSchema),
+const CommonEntries = {
+  enabled: v.optional(v.boolean()),
   env_http_headers: v.optional(StringTableSchema),
   bearer_token_env_var: v.optional(NonBlankString),
-});
+};
+const LocalSchema = v.pipe(
+  v.looseObject({
+    ...CommonEntries,
+    command: NonBlankString,
+    args: v.optional(v.array(v.string())),
+    env: v.optional(StringTableSchema),
+    cwd: v.optional(NonBlankString),
+    url: v.optional(HttpUrl),
+    http_headers: v.optional(StringTableSchema),
+  }),
+  v.transform((value) => ({ ...value, transport: "local" as const })),
+);
+const RemoteSchema = v.pipe(
+  v.looseObject({
+    ...CommonEntries,
+    url: HttpUrl,
+    command: v.optional(NonBlankString),
+    args: v.optional(v.array(v.string())),
+    env: v.optional(StringTableSchema),
+    cwd: v.optional(NonBlankString),
+    http_headers: v.optional(StringTableSchema),
+  }),
+  v.transform((value) => ({ ...value, transport: "remote" as const })),
+);
 
-export type ServerIssue =
-  | v.InferIssue<typeof LocalSchema>
-  | v.InferIssue<typeof RemoteSchema>;
+const DisabledSchema = v.pipe(
+  v.object({
+    enabled: v.literal(false),
+    command: v.optional(NonBlankString),
+    args: v.optional(v.array(v.string())),
+    env: v.optional(StringTableSchema),
+    cwd: v.optional(NonBlankString),
+    url: v.optional(HttpUrl),
+    http_headers: v.optional(StringTableSchema),
+    env_http_headers: v.optional(StringTableSchema),
+    bearer_token_env_var: v.optional(NonBlankString),
+  }),
+  v.transform((value) => ({ ...value, transport: "disabled" as const })),
+);
+export const RootSchema = v.object({
+  mcp_servers: v.optional(v.pipe(
+    TableSchema,
+    v.transform((value) => ({ ...value })),
+    v.record(v.string(), v.union([DisabledSchema, LocalSchema, RemoteSchema])),
+  )),
+});
