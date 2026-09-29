@@ -190,7 +190,23 @@ export function parseCodexToml(
       : convertLocal(name, value);
     result.diagnostics.push(...conversion.diagnostics);
     if (conversion.config) {
-      result.servers.push({ name, config: conversion.config });
+      result.servers.push({
+        name,
+        config: conversion.config,
+        ...(value.enabled_tools === undefined &&
+            value.disabled_tools === undefined
+          ? {}
+          : {
+            toolFilter: {
+              ...(value.enabled_tools === undefined
+                ? {}
+                : { enabled: value.enabled_tools }),
+              ...(value.disabled_tools === undefined
+                ? {}
+                : { disabled: value.disabled_tools }),
+            },
+          }),
+      });
     }
   }
   return result;

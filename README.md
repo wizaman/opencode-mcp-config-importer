@@ -41,7 +41,7 @@ remote の `url`・`headers` の値に `${VAR}` や `${VAR:-default}` を使う�
 }
 ```
 
-`codex` はプロジェクトルート直下の `.codex/config.toml` のトップレベルの `[mcp_servers]` だけを読みます。対応項目は stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers` です。`enabled = false` のサーバーは取り込みません。`bearer_token_env_var` 以外の未対応の認証設定を持つサーバーは取り込みません。Codex の trust 判定や他の設定レイヤーは再現しません。OpenCode ネイティブの同名設定を優先し、入力元同士の衝突では `sources` の先に書いた入力元の有効な定義を採用します。通常は衝突を警告しません。
+`codex` はプロジェクトルート直下の `.codex/config.toml` のトップレベルの `[mcp_servers]` だけを読みます。対応項目は stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers`、両形式の `enabled_tools` / `disabled_tools` です。ツールの許可リストと拒否リストは MCP ツール一覧に適用し、拒否を優先します。`enabled = false` のサーバーは取り込みません。`bearer_token_env_var` 以外の未対応の認証設定を持つサーバーは取り込みません。Codex の trust 判定や他の設定レイヤーは再現しません。OpenCode ネイティブの同名設定を優先し、入力元同士の衝突では `sources` の先に書いた入力元の有効な定義を採用します。通常は衝突を警告しません。ツール制限のある Codex サーバー名が他のサーバー名と正規化後に衝突する場合は、誤ったツール除外を避けるため、そのサーバーをスキップして診断します。
 
 ### 環境変数由来の HTTP ヘッダー
 

@@ -32,7 +32,7 @@ flowchart LR
 
 | 境界 | 責務 |
 | --- | --- |
-| `src/index.ts` | Plugin ID `opencode-mcp-json-adapter` を公開し、読み込み結果を MCP transform に登録する。 |
+| `src/index.ts` | Plugin ID `opencode-mcp-json-adapter` を公開し、読み込み結果を MCP transform に登録する。登録できた Codex サーバーのツール制限を tool transform で適用する。 |
 | `src/parse_result.ts` | 両入力元のパーサーが返すサーバー定義と診断の型を共有する。 |
 | `src/mcp_json/schema.ts` | `.mcp.json` の Valibot スキーマを定義する。 |
 | `src/mcp_json/index.ts` | JSON解析、ファイル単位の型検証、stdio / HTTP 定義の変換を行う。展開や opt-in の判定は型検証後に行う。 |
@@ -56,14 +56,14 @@ flowchart LR
 
 ## エラーと安全性
 
-- ファイルがない場合は正常な状態として扱う。JSON 全体が不正ならファイルパスと理由を診断し、取り込みを行わない。
-- 一部のサーバーだけが不正なら、その定義を飛ばし、残りの正常なサーバーを登録する。未知のフィールドは、必要な項目の検証を妨げない限り無視する。
+- ファイルがない場合は正常な状態として扱う。JSON / TOML の構文エラーや、既知の構造・フィールドの型違反が一件でもあれば、その入力ファイルからは何も取り込まない。未知の追加フィールドは無視する。
+- 型検証を通過した後の opt-in 不足、変数展開失敗、未対応の認証設定などはサーバー単位でスキップし、同じファイルの他の正常な定義は取り込む。
 - 診断には対象ファイル・サーバー名・フィールド名などを使い、環境変数値、headers、入力 JSON 全体を出力しない。
 - プラグイン自身は MCP の `command` を実行しない。ファイル探索をプロジェクトルート外に広げず、入力ファイルも変更しない。
 
 ## 検証の境界
 
-読み込み・変換の単体テストでは、ファイル不在、空の一覧、stdio / remote、複数サーバー、不正な JSON、一部のみ不正、未知のフィールド、名前衝突、Windows / Unix のコマンドとパスを扱う。MCP サーバーの起動を必要としないテストにする。
+読み込み・変換の単体テストでは、ファイル不在、空の一覧、stdio / remote、複数サーバー、不正な JSON / TOML、一件だけ型違反の場合のファイル全体の拒否、変数展開などで失敗したサーバーだけのスキップ、未知のフィールド、名前衝突、Windows / Unix のコマンドとパスを扱う。MCP サーバーの起動を必要としないテストにする。
 
 ルートの `.mcp.json` に設定済みの `everything-stdio` と `everything-remote` を利用した。stdio は OpenCode でツールが見え、`echo` を呼び出せることを確認済み。remote は Everything サーバーを `deno x -A -y npm:@modelcontextprotocol/server-everything streamableHttp` で別プロセスとして起動し、OpenCode の別インスタンスで両方のサーバーが connected となり、remote 側の `echo` を呼び出せることを確認した。検証用プロセスは終了済み。
 

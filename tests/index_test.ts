@@ -287,3 +287,108 @@ Deno.test("uses only the project root and preserves native MCP definitions", asy
     await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test("filters only imported Codex tools after catalog updates", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, ".codex"));
+    await Deno.writeTextFile(
+      join(root, ".codex", "config.toml"),
+      `
+[mcp_servers.limited]
+command = "server"
+enabled_tools = ["echo", "image"]
+disabled_tools = ["image"]
+[mcp_servers.empty]
+url = "https://example.com/mcp"
+enabled_tools = []
+[mcp_servers.native]
+command = "codex"
+disabled_tools = ["echo"]
+[mcp_servers."collide.one"]
+command = "codex"
+disabled_tools = ["echo"]
+`,
+    );
+    const definitions = new Map<string, unknown>([
+      ["native", { type: "local", command: ["native"] }],
+      ["collide_one", { type: "local", command: ["native"] }],
+    ]);
+    let toolTransform: ((editor: ToolEditor) => void) | undefined;
+    const context = {
+      options: { sources: ["codex"] },
+      location: { project: { directory: root } },
+      mcp: {
+        transform: (callback: (editor: Editor) => void) => {
+          callback({
+            get: (name: string) => definitions.get(name),
+            set: (name: string, config: unknown) =>
+              definitions.set(name, config),
+            list: () => [...definitions.entries()],
+          } as unknown as Editor);
+          return Promise.resolve();
+        },
+      },
+      tool: {
+        transform: (callback: (editor: ToolEditor) => void) => {
+          toolTransform = callback;
+          return Promise.resolve();
+        },
+      },
+    } as unknown as Context;
+    const originalWarn = console.warn;
+    try {
+      console.warn = () => {};
+      await plugin.setup(context);
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(definitions.has("collide.one"), false);
+    assert.deepEqual(definitions.get("native"), {
+      type: "local",
+      command: ["native"],
+    });
+    assert.deepEqual(definitions.get("limited"), {
+      type: "local",
+      command: ["server"],
+    });
+    assert(toolTransform);
+    const filter = (
+      tools: { id: string; name: string; namespace: string }[],
+    ) => {
+      const removed: string[] = [];
+      toolTransform!({
+        list: () =>
+          tools.map((tool) => ({
+            ...tool,
+            options: { namespace: tool.namespace },
+          })),
+        remove: (id: string) => removed.push(id),
+      } as unknown as ToolEditor);
+      return removed;
+    };
+    assert.deepEqual(filter([]), []); // Before connection.
+    const tools = [
+      { id: "limited_echo", name: "echo", namespace: "limited" },
+      { id: "limited_image", name: "image", namespace: "limited" },
+      { id: "limited_other", name: "other", namespace: "limited" },
+      { id: "empty_echo", name: "echo", namespace: "empty" },
+      { id: "native_echo", name: "echo", namespace: "native" },
+      { id: "collide_one_echo", name: "echo", namespace: "collide_one" },
+    ];
+    assert.deepEqual(filter(tools), [
+      "limited_image",
+      "limited_other",
+      "empty_echo",
+    ]);
+    assert.deepEqual(filter(tools), [
+      "limited_image",
+      "limited_other",
+      "empty_echo",
+    ]); // Catalog refresh reapplies the same filter.
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+type ToolEditor = Parameters<Parameters<Context["tool"]["transform"]>[0]>[0];

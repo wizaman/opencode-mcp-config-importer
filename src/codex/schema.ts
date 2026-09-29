@@ -25,6 +25,8 @@ const HttpUrl = v.pipe(
 
 const CommonEntries = {
   enabled: v.optional(v.boolean()),
+  enabled_tools: v.optional(v.array(v.string())),
+  disabled_tools: v.optional(v.array(v.string())),
   env_http_headers: v.optional(StringTableSchema),
   bearer_token_env_var: v.optional(NonBlankString),
 };
@@ -56,6 +58,8 @@ const RemoteSchema = v.pipe(
 const DisabledSchema = v.pipe(
   v.object({
     enabled: v.literal(false),
+    enabled_tools: v.optional(v.array(v.string())),
+    disabled_tools: v.optional(v.array(v.string())),
     command: v.optional(NonBlankString),
     args: v.optional(v.array(v.string())),
     env: v.optional(StringTableSchema),

@@ -130,6 +130,51 @@ url = "https://example.com/mcp"
   ]);
 });
 
+Deno.test("validates Codex tool lists for the entire file and retains filters", () => {
+  for (const field of ["enabled_tools", "disabled_tools"]) {
+    for (const bad of ['"echo"', '["echo", 42]']) {
+      const parsed = parseCodexToml(`
+[mcp_servers.good]
+command = "ok"
+[mcp_servers.bad]
+command = "bad"
+${field} = ${bad}
+`);
+      assert.deepEqual(parsed, {
+        servers: [],
+        diagnostics: ["invalid Codex MCP configuration"],
+      });
+    }
+  }
+  const parsed = parseCodexToml(`
+[mcp_servers.local]
+command = "server"
+enabled_tools = ["echo", "get-tiny-image"]
+disabled_tools = ["get-tiny-image"]
+[mcp_servers.remote]
+url = "https://example.com/mcp"
+enabled_tools = []
+[mcp_servers.disabled]
+enabled = false
+disabled_tools = ["echo"]
+`);
+  assert.deepEqual(parsed.servers, [
+    {
+      name: "local",
+      config: { type: "local", command: ["server"] },
+      toolFilter: {
+        enabled: ["echo", "get-tiny-image"],
+        disabled: ["get-tiny-image"],
+      },
+    },
+    {
+      name: "remote",
+      config: { type: "remote", url: "https://example.com/mcp" },
+      toolFilter: { enabled: [] },
+    },
+  ]);
+});
+
 Deno.test("env HTTP headers are disabled by default without reading the environment", () => {
   const parsed = parseCodexToml(
     `
