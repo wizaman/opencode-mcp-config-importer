@@ -1,90 +1,63 @@
 # opencode-mcp-json-adapter
-プロジェクトルートの `.mcp.json` を OpenCode V2 の MCP 設定に取り込むプラグインです。明示的に有効化した場合は `.codex/config.toml` の `[mcp_servers]` も取り込みます。
 
-対応する transport は stdio と Streamable HTTP です。`.mcp.json` の `type: "http"` と `type: "streamable-http"` は同じ Streamable HTTP として取り込みます。旧式の HTTP+SSE transport（`type: "sse"` など）は、MCP 2026-07-28 仕様で非推奨となったため意図的に取り込みません。Streamable HTTP 内で使われる SSE レスポンスとは別の話です。`type: "ws"` は MCP の標準 transport ではないため取り込みません。[^mcp-2026-07-28]
+プロジェクトルートの `.mcp.json` にある MCP サーバーを OpenCode V2 に取り込むプラグインです。明示的に有効化した場合は、同じルートの `.codex/config.toml` の `[mcp_servers]` も読みます。MCP プロトコルと `.mcp.json` というクライアント側の設定形式は別物です。Claude Code、Copilot CLI、Codex 全体との完全互換は目指していません。
 
-`.mcp.json` のサーバー別 `timeout` は正の整数（ミリ秒）を受け付け、1000 未満なら 1000 に引き上げて OpenCode の `timeout.execution` に渡します。未指定なら OpenCode の既定値（通常12時間、グローバルの `mcp.timeout.execution` があればその値）を使い、0・負数・不正な型・小数の場合はファイル全体を取り込みません。Claude Code ではツール呼び出し向けですが、Copilot CLI ではツール発見にも適用されます。本プラグインでは発見用の `timeout.catalog` を変更せず、OpenCode の `execution` は MCP prompt・resource の取得にも適用されるため、どちらとも完全には一致しません。環境変数展開を含む形式ごとの差異は [PRD のタイムアウト・環境変数の節](docs/prd.md#タイムアウト)を参照してください。
+## 現在の利用方法
 
-stdio の `args`・`env` の値では `${VAR}` と `${VAR:-default}` を展開します。参照元は OpenCode プロセスの環境変数と同じサーバーの `env` で、同名なら `env` が優先です。未定義の `${VAR}` や循環参照があればサーバー定義を取り込まず、空文字列を明示するなら `${VAR:-}` を指定します。`command`・`cwd` は展開しません。子プロセスの環境変数の継承は OpenCode の仕様に従い、`env` に書かれていない変数を隠しません。展開した値が `args` から見える可能性があるため、そこに機密値を指定する場合は注意してください。
+npm 公開前の開発版です。リポジトリをローカルに配置し、OpenCode V2 の `opencode.jsonc` からプラグインのディレクトリを指定します。以下の `./src` は、このリポジトリを OpenCode のプロジェクトルートとして使う場合の例です。別のプロジェクトから使う場合は、実際の配置に合わせてパスを変えてください。
 
-### `.mcp.json` の remote 環境変数展開
+```jsonc
+{
+  "plugins": [{ "package": "./src" }]
+}
+```
 
-remote の `url`・`headers` の値に `${VAR}` や `${VAR:-default}` を使う場合、既定では**サーバー定義全体を取り込みません**。静的なヘッダーだけで接続することもありません。送信先と送信する値を利用者が確認したうえで展開を許可する場合のみ、プラグインの `options` に `"allowMcpJsonRemoteEnvExpansion": true` を指定してください。`true` 以外では有効にならず、Codex 用の `allowCodexEnvHttpHeaders` とは独立です。
+既定ではプロジェクトルート直下の `.mcp.json` だけを読みます。Codex の MCP サーバーも取り込む場合は次のように明示します。グローバルなプラグイン設定に指定した場合、適用先の各プロジェクトで Codex 設定を読みます。このリポジトリの `opencode.jsonc` は開発用に両方を有効にしています。
 
 ```jsonc
 {
   "plugins": [{
     "package": "./src",
-    "options": { "allowMcpJsonRemoteEnvExpansion": true }
+    "options": { "sources": ["mcp-json", "codex"] }
   }]
 }
 ```
 
-例えば `.mcp.json` の `"headers": {"Authorization": "Bearer ${MCP_TOKEN}"}` は OpenCode プロセスの `MCP_TOKEN` をプラグイン読み込み時に展開します。remote の `env` は参照せず、未定義の変数や不正な展開結果があれば定義全体をスキップします。診断に値は出しません。**opt-in は秘密値の隔離や送信先の安全性を保証しません。** プロセス環境の値をどの URL に送るかは利用者の責任です。静的な `url`・`headers` は opt-in なしでも取り込めます。
+入力ファイルは起動時に読み、変更後はプラグインの再読み込みが必要です。OpenCode ネイティブの同名 MCP 設定を優先し、入力元同士の同名定義では `sources` の先に書いた入力元の有効な定義を採用します。既知のフィールドに型違反がある場合は、その**入力ファイル全体**を取り込みません。型検証を通過した後の opt-in 不足・展開失敗・未対応認証などは、該当サーバー単位でスキップします。
 
-実際の送信を確認するには、ポート 3001・4097 を空けて `deno task smoke:mcp-json-remote-env` を実行します。固定 fixture・ダミー値を使った一時プロジェクトと受信用 MCP サーバーを起動し、opt-in 無効時と変数未設定時に dynamic サーバーが登録されないこと、有効時に展開後の URL とヘッダーが受信されることを確認します。既存の `.mcp.json` や現在の OpenCode セッションは変更せず、`deno test` と CI には含めません。
+## 対応範囲と注意点
 
-[^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
-
-## Codex 設定の取り込み
-
-既定では `.mcp.json` のみを読みます。Codex 設定を併用する場合は OpenCode V2 の `opencode.jsonc` で次のように指定します。このリポジトリの `opencode.jsonc` は動作確認のため両方を有効化済みです。
-
-```jsonc
-{
-  "plugins": [
-    {
-      "package": "./src",
-      "options": { "sources": ["mcp-json", "codex"] }
-    }
-  ]
-}
-```
-
-`codex` はプロジェクトルート直下の `.codex/config.toml` のトップレベルの `[mcp_servers]` だけを読みます。対応項目は stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers`、両形式の `enabled_tools` / `disabled_tools` です。ツールの許可リストと拒否リストは MCP ツール一覧に適用し、拒否を優先します。`enabled = false` のサーバーは取り込みません。`bearer_token_env_var` 以外の未対応の認証設定を持つサーバーは取り込みません。Codex の trust 判定や他の設定レイヤーは再現しません。OpenCode ネイティブの同名設定を優先し、入力元同士の衝突では `sources` の先に書いた入力元の有効な定義を採用します。通常は衝突を警告しません。ツール制限のある Codex サーバー名が他のサーバー名と正規化後に衝突する場合は、誤ったツール除外を避けるため、そのサーバーをスキップして診断します。
-
-### 環境変数由来の HTTP ヘッダー
-
-Codex の `env_http_headers` または `bearer_token_env_var` を含むサーバーは、既定では**サーバー定義全体を取り込みません**。静的ヘッダーだけを使って接続することはありません。リスクを理解して利用する場合のみ、OpenCode のプラグイン設定に `"allowCodexEnvHttpHeaders": true` を追加します。`true` 以外の値では有効になりません。このオプション名は従来のままですが、Bearer ヘッダーも対象です。
-
-```jsonc
-{
-  "plugins": [
-    {
-      "package": "./src",
-      "options": {
-        "sources": ["mcp-json", "codex"],
-        "allowCodexEnvHttpHeaders": true
-      }
-    }
-  ]
-}
-```
-
-例えば `env_http_headers = { "X-API-Key" = "MY_MCP_API_KEY" }` なら、プラグインは**起動時に** OpenCode プロセスの `MY_MCP_API_KEY` を読み、ヘッダーとして OpenCode に渡します。未設定または空白だけの場合はそのヘッダーを追加せず、同名の `http_headers` があれば静的値を残します。値がある場合は、大文字・小文字を区別せず静的ヘッダーを上書きします。変更後の環境変数を使うにはプラグインを再読み込みする必要があります。秘密値そのものをログや診断には出しません。
-
-`bearer_token_env_var = "MY_MCP_TOKEN"` は `MY_MCP_TOKEN` の値から `Authorization: Bearer <値>` を組み立てる設定です。`env_http_headers` による `Authorization` および同名の静的ヘッダーより優先します。環境変数が未設定・空文字・空白だけ、または HTTP ヘッダーとして不正な値の場合は、認証なしで接続しないよう**サーバー定義全体をスキップ**します。これは OAuth のログイン・トークン更新ではなく、外部で用意した値を送るだけです。
+- stdio と Streamable HTTP を取り込みます。`.mcp.json` の `type: "http"` と `type: "streamable-http"` は同じ Streamable HTTP として扱います。旧式 HTTP+SSE transport（`type: "sse"` など）、WebSocket（`type: "ws"`）、Copilot CLI 専用 `type: "local"` は対象外です。これらの `type` を一つでも含む場合は、サーバー単位ではなく `.mcp.json` 全体を拒否します。Streamable HTTP の SSE レスポンスを拒否する意味ではありません。[^mcp-2026-07-28]
+- `.mcp.json` の stdio の `args`・`env` の値では `${VAR}` と `${VAR:-default}` を展開します。OpenCode プロセスの環境変数と同じサーバーの `env` を参照し、後者が優先です。未定義の `${VAR}` や循環参照ではサーバーをスキップします。`command`・`cwd` は展開しません。子プロセスへの環境変数の継承は OpenCode に従います。秘密値を `args` に渡すと見える可能性があります。
+- `.mcp.json` の `timeout` は正の整数（ミリ秒）を受け付け、1000 未満は 1000 にして OpenCode の `timeout.execution` に渡します。未指定なら OpenCode のグローバル設定があればその値、なければ既定値を使います。0・負数・小数・型違いはファイル全体を拒否します。`timeout.catalog` は変更しません。他クライアントの発見・呼び出しタイムアウトとは完全には一致しません。
+- Codex はトップレベルの `[mcp_servers]` のみが対象です。stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers`、両形式の `enabled_tools` / `disabled_tools` に対応します。`enabled = false` のサーバーは取り込みません。ツール制限は拒否を優先し、OpenCode ネイティブ設定には適用しません。正規化後のサーバー名が衝突し、別サーバーへの誤適用があり得る場合は対象 Codex サーバーをスキップします。進行中のモデルリクエストが既に取得したツール一覧には遡及せず、別クライアントから MCP サーバーへ直接接続することも制限しません。
 
 > [!WARNING]
-> Codex の `shell_environment_policy` やプロジェクトの trust 判定は OpenCode に引き継がれません。opt-in 時にはプラグインと OpenCode の MCP 登録処理が秘密値を扱い、エージェントからの秘密値隔離は保証されません。OpenCode に渡した環境変数は、エージェントが実行できる shell 等からも参照可能な場合があります。**オプションを無効にしても、OpenCode プロセス自体に渡した環境変数を隔離する機能にはなりません。** グローバルなプラグイン設定で有効にすると、適用先の各プロジェクトでこの処理が有効になります。まずは利用するプロジェクトだけで有効化し、隔離が必要な秘密情報には外部の認証 proxy 等を検討してください。
+> `.mcp.json` の Copilot CLI 固有の `tools`（ツールの絞り込み）、`oidc`（トークンの注入）、`oauthClientId` / `oauthScopes` などの OAuth 設定は無視してサーバーを登録します。元のクライアントのツール制限や認証は再現されません。必要な制約や認証を OpenCode 側で別途確認してください。
 
-`deno task smoke:codex-env-headers` は、固定 fixture とダミー値を使い OpenCode V2 の別インスタンスで実際の受信ヘッダー（Bearer を含む）を検査する手動テストです。ポート 3001・4097 を空けて実行してください。`deno test` と CI には含まれず、検証後は自身が起動したプロセスだけを停止します。
+> [!WARNING]
+> Codex の `default_tools_approval_mode` やツール別 `approval_mode`、`scopes` / `oauth_resource` は**無視してサーバーを登録**します。Codex 側の承認・認証上の制約が OpenCode で同じように働くと考えないでください。`experimental_environment = "remote"` を指定した stdio サーバーも OpenCode では**ローカルで起動**します。Codex の trust 判定や設定の他レイヤーも引き継ぎません。`auth` / `oauth` など未対応の認証設定を持つサーバーは取り込みません。
 
-ヘッダーの実送信は、ポート 3001・4097 が空いている状態で `deno task smoke:codex-headers` を実行すると確認できます。この手動テストは OpenCode V2 の別インスタンスと受信用 MCP サーバーを起動し、`.codex/config.toml` の `X-Test-Source: codex` が届くことを確認して、起動したプロセスだけを停止します。モデルは使用せず、`deno test` や CI には含めません。
+### remote の環境変数を使う場合
 
-## remote MCP のローカル動作確認
+`.mcp.json` の remote の `url`・`headers` に `${VAR}` を含むサーバーは、既定では**定義全体を取り込みません**。送信先と値を確認したうえで、必要な場合のみ `options` に `"allowMcpJsonRemoteEnvExpansion": true` を指定してください。OpenCode プロセスの環境変数から起動時に展開します。remote の `env` は参照せず、未定義の変数や不正な展開結果ではサーバーをスキップします。静的な URL・ヘッダーには opt-in は不要です。
 
-Codex や OpenCode から手動で接続する場合は、別のターミナルで `deno task remote:serve` を実行してください。Everything MCP の Streamable HTTP サーバーだけをポート 3001 で起動し、`.codex/config.toml` の `codex-remote` と `.mcp.json` の `everything-remote` が接続できます。確認後はそのターミナルで Ctrl+C を押して停止します。ポート 3001 が使用中なら起動できないため、次の `smoke:remote` とは同時に実行しないでください。このタスクは `deno test` や CI では実行しません。
+Codex の `env_http_headers`・`bearer_token_env_var` を含むサーバーも、既定では**定義全体を取り込みません**。`"allowCodexEnvHttpHeaders": true` は別の opt-in で、前者は環境変数からヘッダーを作り、後者は `Authorization: Bearer <値>` を作ります。`env_http_headers` の値が未設定・空白・HTTP ヘッダーとして不正なら、そのヘッダーだけを追加せず、同名の静的な `http_headers` があれば残します。一方、Bearer の値が未設定・空白・不正なら認証なしではサーバーを登録しません。OAuth のログイン・更新ではありません。
 
-プロジェクトルートで `deno task smoke:remote` を実行します。この手動テストは `deno test` や CI の対象外です。Deno、OpenCode V2 の実行ファイル（`opencode2` を優先し、見つからない場合のみ V2 と確認できた `opencode` を使用）、Everything MCP の npm パッケージへのアクセスが必要です。ポート 3001 と 4097 は空けておいてください。
+```jsonc
+{
+  "plugins": [{
+    "package": "./src",
+    "options": {
+      "sources": ["mcp-json", "codex"],
+      "allowMcpJsonRemoteEnvExpansion": true,
+      "allowCodexEnvHttpHeaders": true
+    }
+  }]
+}
+```
 
-- `3001`: Everything MCP が Streamable HTTP で待ち受けるポートです。`.mcp.json` の `everything-remote` は `http://localhost:3001/mcp` に接続します。
-- `4097`: このタスクが検証専用に起動する OpenCode V2 サーバーの API ポートです。手動検証で選んだ番号であり、OpenCode の既定ポートではありません。
+> [!WARNING]
+> どちらの opt-in も秘密値の隔離や送信先の安全性を保証しません。Codex の `shell_environment_policy` や trust 判定は引き継がれません。プラグインと OpenCode が起動時の環境変数を扱い、OpenCode プロセスの環境変数はエージェントが実行できる shell 等からも参照可能な場合があります。opt-in を無効にしても OpenCode プロセスの環境変数を隔離する機能にはなりません。グローバル設定で opt-in すると各プロジェクトに適用されます。隔離が必要な場合は外部の認証 proxy 等を検討してください。
 
-このタスクは Everything を Streamable HTTP モードで起動し、検証専用の OpenCode V2 サーバーでプラグインが有効なことと、`everything-stdio`・`everything-remote` が両方とも `connected` になることを確認します。モデルや `echo` は呼び出しません。`.mcp.json` のサーバー名と URL `http://localhost:3001/mcp` は検証用の値を維持してください。終了時にはタスクが起動したプロセスだけを停止し、現在の OpenCode セッションは再起動しません。失敗した場合はエラーメッセージを確認し、原因を解消してから再実行してください。
-
-## OAuth MCP の手動動作確認
-
-別のターミナルで `deno task oauth:serve` を実行します。Deno、Git、Bun、OpenCode V2 が必要で、ポート 3232 を空けておいてください。タスクは参照実装を `temp/example-remote-server` に未取得の場合のみ clone し、コミット `ca6133a4e63d22e2c035defa691d241ce22296a9` に固定します。既存の checkout のコミットが違う場合や追跡対象ファイルに変更がある場合は、勝手に上書きせず中断します。依存関係は Bun で導入し、元の `package-lock.json` から初回に生成した `bun.lock` を次回以降は固定して使用します。npm CLI は使いません。`temp/` は Git の対象外です。
-
-サーバーが起動したら、OpenCode の `/mcps` で `example-oauth` を選び、ブラウザーで認証して `connected` になることを確認してください。`.mcp.json` の `http://localhost:3232/mcp` は常設です。サーバー停止中は `example-oauth` だけ接続できません。認証フローは手動で行い、`deno test` や CI、既存の `smoke:remote` の合格条件には含めません。検証後は起動したターミナルで Ctrl+C を押すと、タスクが起動したサーバーを停止します。
+[^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
