@@ -7,7 +7,7 @@ const host = "127.0.0.1";
 const mcpPort = 3001;
 const apiPort = 4097;
 const api = `http://${host}:${apiPort}`;
-const pluginID = "opencode-mcp-json-adapter";
+const pluginID = "opencode-mcp-config-importer";
 const decoder = new TextDecoder();
 const children: Deno.ChildProcess[] = [];
 

@@ -1,5 +1,5 @@
 {
-  "name": "opencode-mcp-json-adapter",
+  "name": "opencode-mcp-config-importer",
   "version": "0.0.0",
   "description": "Use project-root .mcp.json and Codex MCP servers in OpenCode V2",
   "license": "MIT",

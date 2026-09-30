@@ -51,7 +51,7 @@ OpenCode V2 のプラグイン `options.sources` で入力元を選ぶ。省略�
 {
   "plugins": [
     {
-      "package": "opencode-mcp-json-adapter",
+      "package": "opencode-mcp-config-importer",
       "options": { "sources": ["mcp-json", "codex"] }
     }
   ]
@@ -286,7 +286,7 @@ OpenCode V2 Plugin APIのMCP extension pointを使用する。
 Plugin ID:
 
 ```text
-opencode-mcp-json-adapter
+opencode-mcp-config-importer
 ```
 
 ## 設定優先順位
@@ -341,7 +341,7 @@ Plugin自身はcommandを実行しない。
 
 ## 成功条件
 
-ユーザーがグローバルに `opencode-mcp-json-adapter` を有効化していれば、
+ユーザーがグローバルに `opencode-mcp-config-importer` を有効化していれば、
 
 ```text
 repo/
