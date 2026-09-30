@@ -1,10 +1,12 @@
 # opencode-mcp-config-importer
 
-プロジェクトルートの `.mcp.json` にある MCP サーバーを OpenCode V2 に取り込むプラグインです。明示的に有効化した場合は、同じルートの `.codex/config.toml` の `[mcp_servers]` も読みます。MCP プロトコルと `.mcp.json` というクライアント側の設定形式は別物です。Claude Code、Copilot CLI、Codex 全体との完全互換は目指していません。
+[日本語](https://github.com/wizaman/opencode-mcp-config-importer/blob/main/README.ja.md)
 
-## 現在の利用方法
+This plugin imports MCP servers from the project root's `.mcp.json` into OpenCode V2. When explicitly enabled, it also reads `[mcp_servers]` from `.codex/config.toml` in the same project root. The MCP protocol and `.mcp.json`, a client-side configuration format, are different things. This plugin does not aim for full compatibility with Claude Code, Copilot CLI, or Codex.
 
-npm 公開前の開発版です。リポジトリをローカルに配置し、OpenCode V2 の `opencode.jsonc` からプラグインのディレクトリを指定します。以下の `./src` は、このリポジトリを OpenCode のプロジェクトルートとして使う場合の例です。別のプロジェクトから使う場合は、実際の配置に合わせてパスを変えてください。
+## Using the development version
+
+The package has not been published to npm yet. Place this repository locally and configure its plugin directory in OpenCode V2's `opencode.jsonc`. The `./src` example below applies when this repository is the OpenCode project root. From another project, adjust the path to where you placed the repository.
 
 ```jsonc
 {
@@ -12,7 +14,7 @@ npm 公開前の開発版です。リポジトリをローカルに配置し、O
 }
 ```
 
-既定ではプロジェクトルート直下の `.mcp.json` だけを読みます。Codex の MCP サーバーも取り込む場合は次のように明示します。グローバルなプラグイン設定に指定した場合、適用先の各プロジェクトで Codex 設定を読みます。このリポジトリの `opencode.jsonc` は開発用に両方を有効にしています。
+By default, the plugin reads only `.mcp.json` directly under the project root. To import Codex MCP servers as well, opt in explicitly. If you enable Codex in a global plugin configuration, it will read Codex settings in every project where that configuration applies. This repository's `opencode.jsonc` enables both sources for development.
 
 ```jsonc
 {
@@ -23,26 +25,26 @@ npm 公開前の開発版です。リポジトリをローカルに配置し、O
 }
 ```
 
-入力ファイルは起動時に読み、変更後はプラグインの再読み込みが必要です。OpenCode ネイティブの同名 MCP 設定を優先し、入力元同士の同名定義では `sources` の先に書いた入力元の有効な定義を採用します。既知のフィールドに型違反がある場合は、その**入力ファイル全体**を取り込みません。型検証を通過した後の opt-in 不足・展開失敗・未対応認証などは、該当サーバー単位でスキップします。
+The plugin reads input files at startup; reload the plugin after changing them. Native OpenCode MCP definitions take precedence over imported definitions with the same name. Between import sources, the first valid definition in `sources` order wins. If a known field has an invalid type, the **entire input file** is rejected. After type validation, missing opt-ins, failed expansions, and unsupported authentication settings cause only the affected server to be skipped.
 
-## 対応範囲と注意点
+## Supported behavior and caveats
 
-- stdio と Streamable HTTP を取り込みます。`.mcp.json` の `type: "http"` と `type: "streamable-http"` は同じ Streamable HTTP として扱います。旧式 HTTP+SSE transport（`type: "sse"` など）、WebSocket（`type: "ws"`）、Copilot CLI 専用 `type: "local"` は対象外です。これらの `type` を一つでも含む場合は、サーバー単位ではなく `.mcp.json` 全体を拒否します。Streamable HTTP の SSE レスポンスを拒否する意味ではありません。[^mcp-2026-07-28]
-- `.mcp.json` の stdio の `args`・`env` の値では `${VAR}` と `${VAR:-default}` を展開します。OpenCode プロセスの環境変数と同じサーバーの `env` を参照し、後者が優先です。未定義の `${VAR}` や循環参照ではサーバーをスキップします。`command`・`cwd` は展開しません。子プロセスへの環境変数の継承は OpenCode に従います。秘密値を `args` に渡すと見える可能性があります。
-- `.mcp.json` の `timeout` は正の整数（ミリ秒）を受け付け、1000 未満は 1000 にして OpenCode の `timeout.execution` に渡します。未指定なら OpenCode のグローバル設定があればその値、なければ既定値を使います。0・負数・小数・型違いはファイル全体を拒否します。`timeout.catalog` は変更しません。他クライアントの発見・呼び出しタイムアウトとは完全には一致しません。
-- Codex はトップレベルの `[mcp_servers]` のみが対象です。stdio の `command` / `args` / `env` / `cwd`、Streamable HTTP の `url` / `http_headers`、両形式の `enabled_tools` / `disabled_tools` に対応します。`enabled = false` のサーバーは取り込みません。ツール制限は拒否を優先し、OpenCode ネイティブ設定には適用しません。正規化後のサーバー名が衝突し、別サーバーへの誤適用があり得る場合は対象 Codex サーバーをスキップします。進行中のモデルリクエストが既に取得したツール一覧には遡及せず、別クライアントから MCP サーバーへ直接接続することも制限しません。
-
-> [!WARNING]
-> `.mcp.json` の Copilot CLI 固有の `tools`（ツールの絞り込み）、`oidc`（トークンの注入）、`oauthClientId` / `oauthScopes` などの OAuth 設定は無視してサーバーを登録します。元のクライアントのツール制限や認証は再現されません。必要な制約や認証を OpenCode 側で別途確認してください。
+- The plugin supports stdio and Streamable HTTP. In `.mcp.json`, `type: "http"` and `type: "streamable-http"` both mean Streamable HTTP. Legacy HTTP+SSE transport (`type: "sse"`, for example), WebSocket (`type: "ws"`), and Copilot CLI-specific `type: "local"` are not supported. If even one server uses one of these types, the **entire `.mcp.json` file** is rejected rather than just that server. This does not prohibit SSE responses within Streamable HTTP.[^mcp-2026-07-28]
+- For stdio servers in `.mcp.json`, `${VAR}` and `${VAR:-default}` are expanded in `args` and `env` values. Expansion reads the OpenCode process environment and the same server's `env`, with the latter taking precedence. An unresolved `${VAR}` or a cyclic reference causes the server to be skipped. `command` and `cwd` are not expanded. OpenCode controls which environment variables child processes inherit. Secrets expanded into `args` may be visible elsewhere.
+- `.mcp.json` accepts a positive integer `timeout` in milliseconds, raising values below 1000 to 1000 before passing them to OpenCode's `timeout.execution`. If omitted, OpenCode uses its global setting, if present, or its default. Zero, negative, fractional, or incorrectly typed values reject the entire file. The plugin does not change `timeout.catalog`, so timeout behavior does not fully match other clients' discovery and execution timeouts.
+- For Codex, only the top-level `[mcp_servers]` table is read. Supported fields include stdio `command` / `args` / `env` / `cwd`, Streamable HTTP `url` / `http_headers`, and `enabled_tools` / `disabled_tools` for either transport. Servers with `enabled = false` are not imported. Deny rules take precedence in tool filters, which do not apply to native OpenCode definitions. If normalized server names collide and a filter could affect another server, the affected Codex server is skipped. Filters do not retroactively change the tool snapshot of an in-flight model request or restrict other clients connecting directly to an MCP server.
 
 > [!WARNING]
-> Codex の `default_tools_approval_mode` やツール別 `approval_mode`、`scopes` / `oauth_resource` は**無視してサーバーを登録**します。Codex 側の承認・認証上の制約が OpenCode で同じように働くと考えないでください。`experimental_environment = "remote"` を指定した stdio サーバーも OpenCode では**ローカルで起動**します。Codex の trust 判定や設定の他レイヤーも引き継ぎません。`auth` / `oauth` など未対応の認証設定を持つサーバーは取り込みません。
+> Copilot CLI-specific fields in `.mcp.json`, such as `tools` (tool filtering), `oidc` (token injection), and OAuth settings including `oauthClientId` / `oauthScopes`, are ignored while the server is imported. The originating client's tool restrictions and authentication are not reproduced. Review the required restrictions and authentication separately in OpenCode.
 
-### remote の環境変数を使う場合
+> [!WARNING]
+> Codex `default_tools_approval_mode`, per-tool `approval_mode`, and `scopes` / `oauth_resource` are **ignored while the server is imported**. Do not assume that Codex's approval or authentication constraints work the same way in OpenCode. A stdio server with `experimental_environment = "remote"` is also **started locally** by OpenCode. Codex trust decisions and other configuration layers are not inherited. Servers with unsupported authentication settings such as `auth` / `oauth` are not imported.
 
-`.mcp.json` の remote の `url`・`headers` に `${VAR}` を含むサーバーは、既定では**定義全体を取り込みません**。送信先と値を確認したうえで、必要な場合のみ `options` に `"allowMcpJsonRemoteEnvExpansion": true` を指定してください。OpenCode プロセスの環境変数から起動時に展開します。remote の `env` は参照せず、未定義の変数や不正な展開結果ではサーバーをスキップします。静的な URL・ヘッダーには opt-in は不要です。
+### Environment variables for remote servers
 
-Codex の `env_http_headers`・`bearer_token_env_var` を含むサーバーも、既定では**定義全体を取り込みません**。`"allowCodexEnvHttpHeaders": true` は別の opt-in で、前者は環境変数からヘッダーを作り、後者は `Authorization: Bearer <値>` を作ります。`env_http_headers` の値が未設定・空白・HTTP ヘッダーとして不正なら、そのヘッダーだけを追加せず、同名の静的な `http_headers` があれば残します。一方、Bearer の値が未設定・空白・不正なら認証なしではサーバーを登録しません。OAuth のログイン・更新ではありません。
+By default, a remote `.mcp.json` server whose `url` or `headers` contain `${VAR}` is **not imported at all**. Only after checking the destination and values, set `"allowMcpJsonRemoteEnvExpansion": true` in the plugin `options` if you need expansion. Values are expanded from the OpenCode process environment at startup; a remote server's `env` is not consulted. Unresolved variables or invalid expanded values cause the server to be skipped. Static URLs and headers do not require this opt-in.
+
+Likewise, a Codex server with `env_http_headers` or `bearer_token_env_var` is **not imported at all** by default. `"allowCodexEnvHttpHeaders": true` is a separate opt-in: the former creates headers from environment variables; the latter creates `Authorization: Bearer <value>`. If a value in `env_http_headers` is missing, blank, or invalid as an HTTP header, only that header is omitted; a static value for the same header in `http_headers` remains. By contrast, if the Bearer value is missing, blank, or invalid, the server is not registered without authentication. This does not implement OAuth login or token refresh.
 
 ```jsonc
 {
@@ -58,6 +60,6 @@ Codex の `env_http_headers`・`bearer_token_env_var` を含むサーバーも�
 ```
 
 > [!WARNING]
-> どちらの opt-in も秘密値の隔離や送信先の安全性を保証しません。Codex の `shell_environment_policy` や trust 判定は引き継がれません。プラグインと OpenCode が起動時の環境変数を扱い、OpenCode プロセスの環境変数はエージェントが実行できる shell 等からも参照可能な場合があります。opt-in を無効にしても OpenCode プロセスの環境変数を隔離する機能にはなりません。グローバル設定で opt-in すると各プロジェクトに適用されます。隔離が必要な場合は外部の認証 proxy 等を検討してください。
+> Neither opt-in isolates secrets or guarantees that the destination is safe. Codex's `shell_environment_policy` and trust decisions are not inherited. The plugin and OpenCode handle process environment values at startup, and an agent may also be able to access those values through a shell it can run. Disabling these options does **not** isolate variables already provided to the OpenCode process. Global opt-ins apply across projects. If you need isolation, consider an external authentication proxy.
 
-[^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
+[^mcp-2026-07-28]: [MCP 2026-07-28 specification announcement (Deprecations)](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
