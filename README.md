@@ -1,4 +1,4 @@
-# opencode-mcp-json-adapter
+# opencode-mcp-config-importer
 
 プロジェクトルートの `.mcp.json` にある MCP サーバーを OpenCode V2 に取り込むプラグインです。明示的に有効化した場合は、同じルートの `.codex/config.toml` の `[mcp_servers]` も読みます。MCP プロトコルと `.mcp.json` というクライアント側の設定形式は別物です。Claude Code、Copilot CLI、Codex 全体との完全互換は目指していません。
 

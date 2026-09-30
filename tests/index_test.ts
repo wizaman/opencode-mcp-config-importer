@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import plugin from "../src/index.ts";
 
 Deno.test("exports the OpenCode plugin", () => {
-  if (plugin.id !== "opencode-mcp-json-adapter") {
+  if (plugin.id !== "opencode-mcp-config-importer") {
     throw new Error("unexpected plugin ID");
   }
 });

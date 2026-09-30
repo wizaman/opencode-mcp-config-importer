@@ -25,12 +25,12 @@ function toolNamespace(name: string): string {
 }
 
 export default Plugin.define({
-  id: "opencode-mcp-json-adapter",
+  id: "opencode-mcp-config-importer",
   async setup(ctx) {
     const selected = sources(ctx.options?.sources);
     if (!selected) {
       console.warn(
-        "[opencode-mcp-json-adapter] options.sources must be an array of mcp-json and/or codex",
+        "[opencode-mcp-config-importer] options.sources must be an array of mcp-json and/or codex",
       );
       return;
     }
@@ -40,7 +40,7 @@ export default Plugin.define({
       typeof ctx.options.allowCodexEnvHttpHeaders !== "boolean"
     ) {
       console.warn(
-        "[opencode-mcp-json-adapter] options.allowCodexEnvHttpHeaders must be a boolean; env_http_headers stays disabled",
+        "[opencode-mcp-config-importer] options.allowCodexEnvHttpHeaders must be a boolean; env_http_headers stays disabled",
       );
     }
     const allowRemoteEnvExpansion =
@@ -50,7 +50,7 @@ export default Plugin.define({
       typeof ctx.options.allowMcpJsonRemoteEnvExpansion !== "boolean"
     ) {
       console.warn(
-        "[opencode-mcp-json-adapter] options.allowMcpJsonRemoteEnvExpansion must be a boolean; remote environment expansion stays disabled",
+        "[opencode-mcp-config-importer] options.allowMcpJsonRemoteEnvExpansion must be a boolean; remote environment expansion stays disabled",
       );
     }
     const servers = new Map<string, ParsedServer>();
@@ -62,7 +62,7 @@ export default Plugin.define({
       } catch (error) {
         if (isNotFound(error)) continue;
         console.warn(
-          `[opencode-mcp-json-adapter] ${path}: failed to read file`,
+          `[opencode-mcp-config-importer] ${path}: failed to read file`,
         );
         continue;
       }
@@ -71,7 +71,7 @@ export default Plugin.define({
         ? parseMcpJson(text, { allowRemoteEnvExpansion })
         : parseCodexToml(text, { allowEnvHttpHeaders });
       for (const diagnostic of result.diagnostics) {
-        console.warn(`[opencode-mcp-json-adapter] ${path}: ${diagnostic}`);
+        console.warn(`[opencode-mcp-config-importer] ${path}: ${diagnostic}`);
       }
       for (const server of result.servers) {
         if (!servers.has(server.name)) servers.set(server.name, server);
@@ -101,7 +101,7 @@ export default Plugin.define({
         ) {
           // A normalized namespace collision could filter another server's tools.
           console.warn(
-            `[opencode-mcp-json-adapter] ${name}: ambiguous MCP tool namespace; server skipped`,
+            `[opencode-mcp-config-importer] ${name}: ambiguous MCP tool namespace; server skipped`,
           );
           continue;
         }
