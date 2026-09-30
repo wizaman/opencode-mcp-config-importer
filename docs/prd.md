@@ -1,8 +1,13 @@
-# opencode-mcp-json-adapter
+---
+title: 製品要件
+description: OpenCode V2 に取り込むプロジェクトローカルの MCP 設定について、入力形式ごとの対応範囲、優先順位、エラー時の扱い、提供形態と成功条件を定義する。
+date: 2026-09-28
+updated: 2026-10-01
+---
 
 ## 目的
 
-OpenCode V2 で、プロジェクトローカルの `.mcp.json` をそのまま利用できるようにする軽量なOpenCode Plugin。
+OpenCode V2 で、プロジェクトローカルの `.mcp.json` と、明示 opt-in した `.codex/config.toml` の MCP サーバー定義を取り込む軽量な OpenCode Plugin。
 
 OpenCode固有の `opencode.jsonc` にMCP設定を重複記述する必要をなくし、複数のagent harness間でプロジェクトのMCP設定を共有しやすくする。
 
@@ -262,20 +267,17 @@ Bearer と任意の環境変数由来ヘッダーは同じ opt-in にまとめ�
 
 [^mcp-2026-07-28]: [MCP 2026-07-28 仕様の発表（Deprecations）](https://redirect.github.com/modelcontextprotocol/modelcontextprotocol/blob/main/blog/content/posts/2026-07-28-spec-ga/index.md)
 
-## 変換
+## 取り込みの流れ
 
-概念的には以下とする。
+入力元によらず、利用者から見た取り込みの流れは次のとおり。
 
 ```mermaid
-flowchart LR
-    A[.mcp.json] --> C[解析・検証]
-    B[.codex/config.toml: opt-in] --> C
-    C --> D[入力元の優先順位を適用]
-    D --> E[OpenCode V2 MCP transform]
-    E --> F[MCP registry]
+flowchart TB
+    A[選択した入力ファイル] --> B[妥当性と取り込み可否の判定]
+    B --> C[優先順位を守って利用可能にする]
 ```
 
-独立した内部表現は設けず、解析済みの定義を共通の MCP transform に渡す。
+各段階の実装上の構成は [アーキテクチャ](./architecture.md) に記録する。
 
 ## OpenCode統合
 
@@ -325,36 +327,7 @@ OpenCode V2 Pluginとしてnpm packageで配布する。
 
 グローバルPluginとして導入し、各repositoryの `.mcp.json` を自動利用できるUXを推奨する。
 
-## 開発時の利用
-
-開発中は公開packageを使用せず、OpenCodeのプロジェクトローカル設定からローカルrepositoryを直接参照できるようにする。
-
-公開版と開発版で同じPlugin IDを使用する。
-
-必要なら開発環境ではグローバル版を無効化してローカル版を優先する。
-
-## テスト
-
-最低限以下を自動テストする。
-
-- `.mcp.json` がない
-- 空のserver一覧
-- stdio server
-- stdio + args
-- stdio + env
-- remote server
-- remote + headers
-- 複数server
-- malformed JSON
-- 一部serverのみ型違反の場合のファイル全体の拒否
-- 未知field
-- OpenCodeネイティブ設定との名前衝突
-- Windows向けcommand/path
-- Unix向けcommand/path
-
-変換処理はOpenCode本体を起動せずunit testできるよう分離する。
-
-Codex 対応では、既定の入力元、Codex の opt-in、MCP 以外の設定の無視、stdio / remote の変換、入力元同士と OpenCode ネイティブ設定との同名衝突、不正な TOML や一部のみ型違反のサーバー定義をテストする。静的な `http_headers` と opt-in の `env_http_headers` / `bearer_token_env_var` は OpenCode 経由の受信確認も行う。環境変数由来のヘッダーは無効時のサーバー単位のスキップ、有効時の未設定・空白・静的ヘッダーとの衝突をテストする。
+バージョン管理・公開物・公開前確認の方針は [公開方針](./release-policy.md) に記録する。
 
 ## セキュリティ
 

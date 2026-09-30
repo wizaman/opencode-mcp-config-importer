@@ -1,4 +1,9 @@
-# 技術スタック
+---
+title: 技術スタック
+description: OpenCode V2 プラグインの開発に用いる言語、Deno のツールチェーン、パッケージ管理、依存関係と検証手段を記録する。
+date: 2026-09-28
+updated: 2026-10-01
+---
 
 ## 言語
 
@@ -21,7 +26,6 @@ Deno採用の目的は開発DXであり、JSRへの公開を目的としない�
 - testing
 - formatting
 - linting
-- version bump
 
 ## Package manifest
 
@@ -41,6 +45,8 @@ Denoは `package.json` を直接利用する。
 
 `deno.json` はDeno固有設定が必要になった場合のみ追加し、package metadataを二重管理しない。
 
+公開物とバージョン運用の方針は [公開方針](./release-policy.md) に記録する。
+
 ## Package manager
 
 Denoのpackage management機能を使用する。
@@ -48,26 +54,6 @@ Denoのpackage management機能を使用する。
 OpenCode Plugin API等のnpm dependenciesは通常のnpm packageとして解決する。
 
 必要に応じて `deno.lock` をコミットし、依存解決を固定する。
-
-## 配布
-
-npmへpublishする。
-
-JSRにはpublishしない。
-
-理由:
-
-- OpenCodeのPlugin配布経路がnpm packageを前提としている。
-- JSRへ公開してもOpenCodeから直接利用できなければ配布上の価値がない。
-- JSR/npmのdual publishによるrelease運用の複雑化を避ける。
-
-## Build
-
-可能ならbuild stepを持たない。
-
-OpenCodeがTypeScript sourceを直接ロードできる範囲では、そのまま配布する。
-
-buildが必要になった場合も、生成物は配布上必要な最小限に留める。
 
 ## Dependencies
 
@@ -98,20 +84,3 @@ deno check
 ```
 
 独立したformatter / linter toolchainは、必要性が出るまで導入しない。
-
-## Release
-
-`package.json` のversionを正本とする。
-
-version bumpにはDenoのversion bump機能を使用できる。
-
-release taskは最低限、
-
-1. test / lint / type check
-2. version整合性確認
-3. npm package内容の確認
-4. npm publish
-
-を再現可能にする。
-
-Git tagやGitHub Releaseの生成をrelease taskに含めるかは、初期実装では必須としない。
