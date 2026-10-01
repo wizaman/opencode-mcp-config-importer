@@ -42,7 +42,16 @@ npm pack --ignore-scripts
 npm publish ./<生成されたファイル名>.tgz --tag beta --access public
 ```
 
-これは Trusted Publishing を使えるようにするための一度限りの bootstrap であり、GitHub Release や tag は作らない。ローカル公開には GitHub Actions/OIDC の provenance は付かない。登録後は npm 側で、このリポジトリの `.github/workflows/release.yml` を Trusted Publisher に設定し、直接の `npm publish` を許可する。以後の公開は GitHub Actions / OIDC 経由とし、ローカル認証や長期 npm token を使わない。この例外は、将来のプレリリースをローカルから公開する方針を意味しない。
+これは Trusted Publishing を使えるようにするための一度限りの bootstrap であり、GitHub Release や Git tag は作らない。ローカル公開には GitHub Actions/OIDC の provenance は付かない。初回登録では `--tag beta` を指定しても `latest` も beta 版を指した。`npm dist-tag ls opencode-mcp-config-importer` で登録後の状態を確認する。通常版を公開するまでは、バージョン指定なしのインストールでも beta 版が選ばれることに注意する。
+
+登録後は npm 側で、このリポジトリの `.github/workflows/release.yml` を Trusted Publisher に設定し、直接の `npm publish` を許可する。npm CLI 11.15.0 以降なら、リポジトリのルートで次のコマンドを使える。パッケージ名は `package.json` の `name`、リポジトリは `repository.url` から取得する。`--file` にはフルパスではなく workflow のファイル名を指定する。
+
+```sh
+npm trust github --file release.yml --allow-publish
+npm trust list
+```
+
+以後の公開は GitHub Actions / OIDC 経由とし、ローカル認証や長期 npm token を使わない。この例外は、将来のプレリリースをローカルから公開する方針を意味しない。
 
 ## 通常公開
 
