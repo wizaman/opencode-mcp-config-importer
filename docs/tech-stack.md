@@ -45,7 +45,7 @@ Denoは `package.json` を直接利用する。
 
 `deno.json` はDeno固有設定が必要になった場合のみ追加し、package metadataを二重管理しない。
 
-公開物とバージョン運用の方針は [公開方針](./release-policy.md) に記録する。
+公開物の確認とバージョン運用の流れは [リリースフロー](./release-flow.md) に記録する。
 
 ## Package manager
 

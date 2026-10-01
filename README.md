@@ -1,5 +1,7 @@
 # opencode-mcp-config-importer
 
+[![npm version](https://img.shields.io/npm/v/opencode-mcp-config-importer.svg)](https://www.npmjs.com/package/opencode-mcp-config-importer) [![CI](https://github.com/wizaman/opencode-mcp-config-importer/actions/workflows/deno.yml/badge.svg?branch=main)](https://github.com/wizaman/opencode-mcp-config-importer/actions/workflows/deno.yml)
+
 [日本語](https://github.com/wizaman/opencode-mcp-config-importer/blob/main/README.ja.md)
 
 This plugin imports MCP servers from the project root's `.mcp.json` into OpenCode V2. When explicitly enabled, it also imports `[mcp_servers]` from `.codex/config.toml` in the same project root.

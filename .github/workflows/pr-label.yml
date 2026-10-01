@@ -1,0 +1,49 @@
+name: PR labels
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      # Read PR metadata only. Never check out or execute the PR's code.
+      - name: Classify PR title
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const managed = ['breaking-change', 'feature', 'fix', 'documentation', 'maintenance']
+            const title = context.payload.pull_request.title
+            const match = /^(feat|fix|docs|refactor|chore)(?:\([^)]+\))?(!)?:\s/.exec(title)
+            const categories = { feat: 'feature', fix: 'fix', docs: 'documentation', refactor: 'maintenance', chore: 'maintenance' }
+            const desired = new Set()
+            if (match) {
+              desired.add(categories[match[1]])
+              if (match[2]) desired.add('breaking-change')
+            }
+            const existing = await github.paginate(github.rest.issues.listLabelsOnIssue, { owner, repo, issue_number })
+            const current = new Set(existing.map(({ name }) => name))
+            for (const label of managed) {
+              if (current.has(label) && !desired.has(label)) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label })
+              }
+            }
+            const missing = [...desired].filter((label) => !current.has(label))
+            if (missing.length) {
+              const colors = { 'breaking-change': 'b60205', feature: '0e8a16', fix: 'd73a4a', documentation: '0075ca', maintenance: 'ededed' }
+              for (const name of missing) {
+                try {
+                  await github.rest.issues.createLabel({ owner, repo, name, color: colors[name] })
+                } catch (error) {
+                  if (error.status !== 422) throw error // Another PR may have created it already.
+                }
+              }
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: missing })
+            }
