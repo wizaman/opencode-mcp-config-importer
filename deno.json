@@ -4,6 +4,10 @@
     "include": ["tests/"]
   },
   "tasks": {
+    "bump": {
+      "description": "main からバージョン変更ブランチとコミットを作る（公開はしない）",
+      "command": "deno run --allow-run=git --allow-read=package.json --allow-write=package.json scripts/bump.ts"
+    },
     "check": {
       "description": "ソース・テスト・スクリプトの型を検査する",
       "command": "deno check src tests scripts"

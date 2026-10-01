@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Preview notes or publish a release
+        type: choice
+        required: true
+        default: preview
+        options: [preview, publish]
+
+jobs:
+  preview:
+    if: inputs.mode == 'preview'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Preview release notes and package files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          tag="v$version"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$tag" -f target_commitish="$GITHUB_SHA" \
+            --jq '.body' > "$RUNNER_TEMP/release-notes.md"
+          npm pack --dry-run --json --ignore-scripts > "$RUNNER_TEMP/pack-preview.json"
+          {
+            echo "## $tag (preview)"
+            echo "Source: $GITHUB_REF ($GITHUB_SHA)"
+            cat "$RUNNER_TEMP/release-notes.md"
+            echo '### Files included by npm pack (dry run)'
+            echo '```text'
+            jq -er '.[0].files[].path' "$RUNNER_TEMP/pack-preview.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    if: inputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: npm-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Guard publication target
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          remote_sha=$(git ls-remote origin refs/heads/main | cut -f1)
+          test -n "$remote_sha" && test "$remote_sha" = "$GITHUB_SHA"
+
+          version=$(node -p 'require("./package.json").version')
+          tag="v$version"
+          case "${version%%+*}" in
+            *-*) echo 'This release workflow does not publish prerelease versions' >&2; exit 1 ;;
+          esac
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag"; then
+            echo "Tag $tag already exists" >&2
+            exit 1
+          else
+            result=$?
+            test "$result" -eq 2 || exit "$result"
+          fi
+
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+
+      - name: Install and validate
+        run: |
+          deno install --frozen-lockfile
+          deno task check
+          deno task test
+          deno task lint
+          deno task fmt
+
+      - name: Pack
+        run: |
+          set -euo pipefail
+          npm pack --json --ignore-scripts --pack-destination "$RUNNER_TEMP" > "$RUNNER_TEMP/pack.json"
+          archive=$(jq -er '.[0].filename' "$RUNNER_TEMP/pack.json")
+          test -f "$RUNNER_TEMP/$archive"
+          echo "PACKAGE_TGZ=$RUNNER_TEMP/$archive" >> "$GITHUB_ENV"
+
+      - name: Generate release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" \
+            --jq '.body' > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Create draft with the package asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" "$PACKAGE_TGZ" --draft \
+            --target "$GITHUB_SHA" --title "$RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Publish the same package to npm
+        run: npm publish "$PACKAGE_TGZ" --access public
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --draft=false

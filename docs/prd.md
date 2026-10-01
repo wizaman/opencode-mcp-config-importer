@@ -327,7 +327,7 @@ OpenCode V2 Pluginとしてnpm packageで配布する。
 
 グローバルPluginとして導入し、各repositoryの `.mcp.json` を自動利用できるUXを推奨する。
 
-バージョン管理・公開物・公開前確認の方針は [公開方針](./release-policy.md) に記録する。
+バージョン管理・公開物・公開前確認の流れは [リリースフロー](./release-flow.md) に記録する。
 
 ## セキュリティ
 
