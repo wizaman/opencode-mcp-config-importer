@@ -15,7 +15,8 @@ jobs:
     if: inputs.mode == 'preview'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # The generate-notes API requires write access even though preview saves nothing.
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
