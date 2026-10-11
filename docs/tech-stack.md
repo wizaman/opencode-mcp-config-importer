@@ -2,7 +2,7 @@
 title: 技術スタック
 description: OpenCode V2 プラグインの開発に用いる言語、Deno のツールチェーン、パッケージ管理、依存関係と検証手段を記録する。
 date: 2026-09-28
-updated: 2026-10-01
+updated: 2026-10-11
 ---
 
 ## 言語
@@ -43,7 +43,7 @@ Deno採用の目的は開発DXであり、JSRへの公開を目的としない�
 
 Denoは `package.json` を直接利用する。
 
-`deno.json` はDeno固有設定が必要になった場合のみ追加し、package metadataを二重管理しない。
+`deno.json` には Deno 固有の設定と開発タスクを置き、package metadataを二重管理しない。
 
 公開物の確認とバージョン運用の流れは [リリースフロー](./release-flow.md) に記録する。
 
@@ -53,7 +53,7 @@ Denoのpackage management機能を使用する。
 
 OpenCode Plugin API等のnpm dependenciesは通常のnpm packageとして解決する。
 
-必要に応じて `deno.lock` をコミットし、依存解決を固定する。
+`deno.lock` をコミットし、CI と公開時の依存解決を固定する。
 
 ## Dependencies
 
